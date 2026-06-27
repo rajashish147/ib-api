@@ -1,0 +1,49 @@
+# ── Build outputs ─────────────────────────────────────────────────────────────
+build/
+out/
+.gradle/
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# ── Gradle wrapper cache ───────────────────────────────────────────────────────
+.gradle/
+gradle/wrapper/gradle-wrapper.jar    # committed intentionally — not ignored
+
+# ── Spring Boot fat JAR ───────────────────────────────────────────────────────
+bootstrap/build/libs/*.jar
+
+# ── IBKR TWS API JAR (must be obtained from IBKR website, see libs/README.md) ─
+libs/TwsApi*.jar
+
+# ── Secrets and environment files ─────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+**/application-local.yml
+**/application-secret.yml
+
+# ── Logs ──────────────────────────────────────────────────────────────────────
+logs/
+*.log
+*.log.*
+
+# ── OS artifacts ─────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Test reports ──────────────────────────────────────────────────────────────
+**/build/reports/
+
+# ── JaCoCo ────────────────────────────────────────────────────────────────────
+**/build/jacoco/
+**/build/jacocoHtml/
+
+# ── Docker volumes ────────────────────────────────────────────────────────────
+docker/volumes/
+docker/data/
+
+# ── Checkstyle cache ──────────────────────────────────────────────────────────
+**/build/tmp/

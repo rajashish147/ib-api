@@ -1,0 +1,11 @@
+package com.ibtrader.domain.port.outbound;
+
+import java.util.List;
+import java.util.Optional;
+
+public interface RuleRepository<T> {
+    T save(T rule);
+    Optional<T> findById(String id);
+    List<T> findAll();
+    void deleteById(String id);
+}
