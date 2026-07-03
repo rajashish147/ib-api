@@ -1,14 +1,17 @@
 package com.ibtrader.infrastructure.ibkr;
 
-import com.ibtrader.infrastructure.persistence.entity.IbCommandOutboxEntity;
-import com.ibtrader.infrastructure.persistence.repository.IbCommandOutboxJpaRepository;
 import com.ibtrader.infrastructure.broker.ibkr.IbConnectionManager;
+import com.ibtrader.infrastructure.persistence.entity.IbCommandOutboxEntity;
+import com.ibtrader.infrastructure.persistence.entity.IbCommandStatus;
+import com.ibtrader.infrastructure.persistence.repository.IbCommandOutboxJpaRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.annotation.Profile;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.List;
 import java.util.logging.Logger;
 
@@ -19,6 +22,7 @@ import java.util.logging.Logger;
  * <p>It isolates the execution of commands from the strategy evaluation pipeline.</p>
  */
 @Component
+@Profile("!demo")
 @RequiredArgsConstructor
 public class OutboxWorker {
 
@@ -38,9 +42,10 @@ public class OutboxWorker {
             return;
         }
 
-        // Note: For production, we'd use a repository method with pessimistic write lock
         List<IbCommandOutboxEntity> pendingCommands = outboxRepository
-                .findByStatusAndNextRetryAtLessThanEqual("PENDING", Instant.now());
+                .findByStatusInAndNextRetryAtLessThanEqual(
+                        Arrays.asList(IbCommandStatus.PENDING, IbCommandStatus.FAILED),
+                        Instant.now());
 
         if (pendingCommands.isEmpty()) {
             return;
@@ -51,7 +56,8 @@ public class OutboxWorker {
         for (IbCommandOutboxEntity command : pendingCommands) {
             try {
                 // 2. Mark as processing
-                command.setStatus("PROCESSING");
+                command.setStatus(IbCommandStatus.PROCESSING);
+                command.setLastAttemptAt(Instant.now());
                 command.setUpdatedAt(Instant.now());
                 outboxRepository.saveAndFlush(command);
 
@@ -61,7 +67,8 @@ public class OutboxWorker {
                 ibConnectionManager.submitCommand(command.getPayload());
 
                 // 4. Update status to SUBMITTED
-                command.setStatus("SUBMITTED");
+                command.setStatus(IbCommandStatus.SENT);
+                command.setSentAt(Instant.now());
                 command.setUpdatedAt(Instant.now());
                 outboxRepository.save(command);
                 LOG.info(String.format("Successfully submitted command %s via IB API.", command.getId()));
@@ -70,15 +77,16 @@ public class OutboxWorker {
                 LOG.severe(String.format("Failed to submit outbox command %s: %s", command.getId(), e.getMessage()));
                 
                 // 5. Retry logic
-                int attempts = command.getAttemptCount() + 1;
+                int attempts = command.getAttemptCount() == null ? 1 : command.getAttemptCount() + 1;
                 command.setAttemptCount(attempts);
-                
-                if (attempts >= 3) {
+
+                int maxAttempts = command.getMaxAttempts() == null ? 3 : command.getMaxAttempts();
+                if (attempts >= maxAttempts) {
                     LOG.severe(String.format("Command %s exceeded max retries. Dead-lettering.", command.getId()));
-                    command.setStatus("DEAD_LETTER");
+                    command.setStatus(IbCommandStatus.SKIPPED);
                     command.setErrorMessage("Max retries exceeded: " + e.getMessage());
                 } else {
-                    command.setStatus("FAILED"); 
+                    command.setStatus(IbCommandStatus.FAILED); 
                     command.setErrorMessage(e.getMessage());
                 }
                 

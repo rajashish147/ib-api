@@ -1,7 +1,9 @@
-package com.ibtrader.domain.engine;
+package com.ibtrader.strategy.engine;
 
+import com.ibtrader.domain.engine.EvaluationContext;
 import com.ibtrader.domain.model.strategy.TradeSignal;
 import com.ibtrader.domain.model.strategy.ValidatedTradeDecision;
+import com.ibtrader.domain.port.inbound.DecisionEnginePort;
 import lombok.RequiredArgsConstructor;
 import java.util.logging.Logger;
 
@@ -18,7 +20,7 @@ import java.util.stream.Collectors;
  * cooldowns, and filters out duplicates.
  */
 @RequiredArgsConstructor
-public class DecisionEngine {
+public class DecisionEngine implements DecisionEnginePort {
 
     private static final Logger LOG = Logger.getLogger(DecisionEngine.class.getName());
 
@@ -29,7 +31,8 @@ public class DecisionEngine {
      * @param context current evaluation context
      * @return a list of validated decisions ready for risk checks
      */
-    public List<ValidatedTradeDecision> processSignals(List<TradeSignal> signals, EvaluationContext context) {
+    @Override
+    public List<ValidatedTradeDecision> evaluateSignals(List<TradeSignal> signals, EvaluationContext context) {
         List<ValidatedTradeDecision> decisions = new ArrayList<>();
         if (signals == null || signals.isEmpty()) {
             return decisions;

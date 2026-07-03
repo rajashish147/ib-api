@@ -12,4 +12,7 @@ import java.util.UUID;
 public interface OrderJpaRepository extends JpaRepository<OrderEntity, UUID> {
     Optional<OrderEntity> findByIbOrderId(Integer ibOrderId);
     List<OrderEntity> findByStatus(String status);
+    List<OrderEntity> findByStatusIn(List<String> statuses);
+    List<OrderEntity> findByRebalancePlanId(UUID rebalancePlanId);
+    List<OrderEntity> findByAssetId(UUID assetId);
 }

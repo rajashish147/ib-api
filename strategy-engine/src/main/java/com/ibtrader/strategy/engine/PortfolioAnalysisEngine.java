@@ -1,5 +1,6 @@
-package com.ibtrader.domain.engine;
+package com.ibtrader.strategy.engine;
 
+import com.ibtrader.domain.engine.EvaluationContext;
 import com.ibtrader.domain.model.asset.Asset;
 import com.ibtrader.domain.model.asset.AssetClass;
 import com.ibtrader.domain.model.common.Money;
@@ -7,8 +8,11 @@ import com.ibtrader.domain.model.common.Percentage;
 import com.ibtrader.domain.model.portfolio.Portfolio;
 import com.ibtrader.domain.model.portfolio.PortfolioAnalysis;
 import com.ibtrader.domain.model.portfolio.Position;
+import com.ibtrader.domain.port.inbound.PortfolioAnalysisPort;
 import com.ibtrader.domain.port.outbound.AssetRepository;
+import com.ibtrader.domain.port.outbound.MarketDataCache;
 import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -22,10 +26,17 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+@Service
 @RequiredArgsConstructor
-public class PortfolioAnalysisEngine {
+public class PortfolioAnalysisEngine implements PortfolioAnalysisPort {
 
     private final AssetRepository assetRepository;
+    private final MarketDataCache marketDataCache;
+
+    @Override
+    public PortfolioAnalysis analyzePortfolio(EvaluationContext context) {
+        return analyze(context.getPortfolio(), null);
+    }
 
     /**
      * Performs a comprehensive analysis on the provided portfolio, looking up
@@ -59,6 +70,12 @@ public class PortfolioAnalysisEngine {
             if (position.isClosed()) continue;
 
             Money mv = position.getMarketValue();
+            Optional<BigDecimal> latestPrice = marketDataCache.getPrice(position.getAssetId());
+            if (latestPrice.isPresent()) {
+                BigDecimal newValue = latestPrice.get().multiply(position.getQuantity().abs());
+                mv = Money.of(newValue, mv.getCurrency());
+            }
+
             totalPositionValue = totalPositionValue.add(mv);
             
             Percentage alloc = calculateAllocation(mv, nlvAmount);

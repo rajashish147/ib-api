@@ -23,6 +23,9 @@ dependencies {
 
     // Resilience4j for circuit breakers around IB connections
     implementation(libs.bundles.resilience4j)
+    
+    // Protobuf required by latest IB API
+    implementation("com.google.protobuf:protobuf-java:4.29.5")
 
     // Observability
     implementation(libs.bundles.observability)

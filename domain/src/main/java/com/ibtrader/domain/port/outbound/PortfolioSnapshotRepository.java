@@ -9,5 +9,6 @@ public interface PortfolioSnapshotRepository {
     PortfolioSnapshot save(PortfolioSnapshot snapshot);
     Optional<PortfolioSnapshot> findById(UUID id);
     List<PortfolioSnapshot> findAll();
+    List<PortfolioSnapshot> findByAccountId(String accountId, int limit);
     void deleteById(UUID id);
 }

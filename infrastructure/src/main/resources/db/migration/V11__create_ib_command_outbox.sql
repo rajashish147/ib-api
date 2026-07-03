@@ -46,7 +46,7 @@ CREATE TABLE ib_command_outbox
 
 -- Index for the publisher: find pending commands ready to send
 CREATE INDEX idx_outbox_pending ON ib_command_outbox (status, next_retry_at)
-    WHERE status IN ('PENDING', 'PROCESSING');
+    WHERE status IN ('PENDING', 'PROCESSING', 'FAILED');
 
 CREATE INDEX idx_outbox_related_order ON ib_command_outbox (related_order_id)
     WHERE related_order_id IS NOT NULL;

@@ -1,9 +1,16 @@
-package com.ibtrader.domain.engine;
+package com.ibtrader.strategy.engine;
 
+import com.ibtrader.domain.engine.EvaluationContext;
+import com.ibtrader.domain.model.asset.Asset;
 import com.ibtrader.domain.model.strategy.OrderPlan;
 import com.ibtrader.domain.model.strategy.ValidatedTradeDecision;
+import com.ibtrader.domain.port.inbound.OrderPlanningPort;
+import com.ibtrader.domain.port.outbound.AssetRepository;
+import com.ibtrader.domain.port.outbound.ExecutionPolicyRepository;
+import com.ibtrader.domain.port.outbound.MarketDataCache;
 import lombok.RequiredArgsConstructor;
 import java.util.logging.Logger;
+import java.util.Optional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -18,7 +25,12 @@ import java.util.UUID;
  * and attaches appropriate execution policies.
  */
 @RequiredArgsConstructor
-public class OrderPlanningEngine {
+public class OrderPlanningEngine implements OrderPlanningPort {
+
+    private final MarketDataCache marketDataCache;
+    private final AssetRepository assetRepository;
+
+    private final ExecutionPolicyRepository executionPolicyRepository;
 
     private static final Logger LOG = Logger.getLogger(OrderPlanningEngine.class.getName());
 
@@ -29,6 +41,7 @@ public class OrderPlanningEngine {
      * @param context current evaluation context
      * @return executable order plans
      */
+    @Override
     public List<OrderPlan> planOrders(List<ValidatedTradeDecision> decisions, EvaluationContext context) {
         List<OrderPlan> plans = new ArrayList<>();
 
@@ -41,9 +54,10 @@ public class OrderPlanningEngine {
                     continue;
                 }
 
-                // TODO: Look up actual execution policy tied to strategy version in DB
-                // For now, default to IMMEDIATE (Market order)
-                String executionPolicy = "IMMEDIATE";
+                // Look up actual execution policy tied to strategy version in DB
+                // Fallback to IMMEDIATE if none configured
+                String executionPolicy = executionPolicyRepository.getPolicy(
+                        context.getStrategy().getExecutionMode()).orElse("IMMEDIATE");
                 String policyParameters = "{}";
 
                 OrderPlan plan = OrderPlan.builder()
@@ -98,8 +112,18 @@ public class OrderPlanningEngine {
     }
 
     private BigDecimal getCurrentPrice(String symbol, EvaluationContext context) {
-        // TODO: Query MarketDataCache for actual price.
-        // Returning a placeholder for now to allow compilation and structural completeness.
+        Optional<Asset> assetOpt = assetRepository.findBySymbol(symbol);
+        if (assetOpt.isEmpty()) {
+            LOG.warning("Cannot get price, asset not found: " + symbol);
+            return BigDecimal.ONE; // Fallback to avoid division by zero
+        }
+        
+        Optional<BigDecimal> priceOpt = marketDataCache.getPrice(assetOpt.get().getId());
+        if (priceOpt.isPresent() && priceOpt.get().compareTo(BigDecimal.ZERO) > 0) {
+            return priceOpt.get();
+        }
+        
+        LOG.warning("MarketDataCache returned no valid price for: " + symbol + ", defaulting to 150.0 for planning");
         return BigDecimal.valueOf(150.0);
     }
 }

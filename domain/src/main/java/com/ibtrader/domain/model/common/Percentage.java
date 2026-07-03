@@ -12,11 +12,11 @@ import java.util.Objects;
  */
 public final class Percentage {
 
-    public static final Percentage ZERO    = new Percentage(BigDecimal.ZERO);
-    public static final Percentage HUNDRED = new Percentage(BigDecimal.valueOf(100));
-
     private static final int SCALE = 6;
     private static final RoundingMode ROUNDING = RoundingMode.HALF_UP;
+
+    public static final Percentage ZERO    = new Percentage(BigDecimal.ZERO);
+    public static final Percentage HUNDRED = new Percentage(BigDecimal.valueOf(100));
 
     private final BigDecimal value;
 

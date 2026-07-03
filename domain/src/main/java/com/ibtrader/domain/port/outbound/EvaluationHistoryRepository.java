@@ -8,4 +8,5 @@ public interface EvaluationHistoryRepository<T> {
     Optional<T> findById(String id);
     List<T> findAll();
     void deleteById(String id);
+    Optional<T> findLastByStrategyId(java.util.UUID strategyId);
 }

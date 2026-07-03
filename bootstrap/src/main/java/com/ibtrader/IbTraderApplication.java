@@ -3,8 +3,6 @@ package com.ibtrader;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
-import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
-import org.springframework.boot.autoconfigure.domain.EntityScan;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
@@ -28,8 +26,6 @@ import org.springframework.scheduling.annotation.EnableScheduling;
  * @see <a href="http://localhost:8080/actuator/health">Health Check</a>
  */
 @SpringBootApplication(scanBasePackages = "com.ibtrader")
-@EnableJpaRepositories(basePackages = "com.ibtrader.infrastructure.persistence.repository")
-@EntityScan(basePackages = "com.ibtrader.infrastructure.persistence.entity")
 @ConfigurationPropertiesScan("com.ibtrader")
 @EnableScheduling
 public class IbTraderApplication {

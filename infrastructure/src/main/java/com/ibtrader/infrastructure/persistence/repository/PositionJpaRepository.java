@@ -5,9 +5,13 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Repository
 public interface PositionJpaRepository extends JpaRepository<PositionEntity, UUID> {
     List<PositionEntity> findByPortfolioId(UUID portfolioId);
+    Optional<PositionEntity> findByPortfolioIdAndAssetId(UUID portfolioId, UUID assetId);
+    void deleteByPortfolioIdAndAssetId(UUID portfolioId, UUID assetId);
+    void deleteAllByPortfolioId(UUID portfolioId);
 }

@@ -29,9 +29,7 @@ CREATE INDEX idx_al_action         ON audit_logs (action);
 CREATE INDEX idx_al_actor          ON audit_logs (actor);
 CREATE INDEX idx_al_occurred_at    ON audit_logs (occurred_at DESC);
 
--- Partial index for recent audit queries
-CREATE INDEX idx_al_recent ON audit_logs (entity_type, occurred_at DESC)
-    WHERE occurred_at > NOW() - INTERVAL '30 days';
+CREATE INDEX idx_al_recent ON audit_logs (entity_type, occurred_at DESC);
 
 COMMENT ON TABLE  audit_logs              IS 'System-wide append-only audit trail — never updated, never deleted';
 COMMENT ON COLUMN audit_logs.actor        IS 'SYSTEM=scheduler/internal, API_USER=REST caller, SCHEDULER=job';

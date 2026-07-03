@@ -14,13 +14,15 @@ import java.util.List;
  */
 public interface GetPositionsUseCase {
 
+    record Query(String accountId) {}
+
     /**
      * Returns all currently open {@link Position}s for the specified account.
      *
-     * @param accountId the IB account string (e.g. {@code "DU1234567"}); must not be blank
+     * @param query the query containing the IB account string; must not be null
      * @return a (possibly empty) list of positions; never {@code null}
      * @throws com.ibtrader.domain.exception.DomainException if no portfolio is found
      *         for the given account ID
      */
-    List<Position> execute(String accountId);
+    List<Position> execute(Query query);
 }

@@ -23,6 +23,11 @@ public final class OrderFilledEvent extends DomainEvent {
     private final UUID orderId;
 
     /**
+     * Trading strategy that produced the order, when available.
+     */
+    private final UUID strategyId;
+
+    /**
      * The IB-assigned order identifier for cross-referencing TWS/Gateway executions.
      */
     private final Integer ibOrderId;
@@ -51,6 +56,7 @@ public final class OrderFilledEvent extends DomainEvent {
      * Constructs an {@code OrderFilledEvent} via its Lombok builder.
      *
      * @param orderId          domain identifier of the order aggregate
+     * @param strategyId       strategy that produced the order, when available
      * @param ibOrderId        IB-assigned order identifier
      * @param symbol           ticker symbol of the traded asset
      * @param filledQuantity   total quantity executed
@@ -61,6 +67,7 @@ public final class OrderFilledEvent extends DomainEvent {
     @Builder
     private OrderFilledEvent(
             UUID orderId,
+            UUID strategyId,
             Integer ibOrderId,
             String symbol,
             BigDecimal filledQuantity,
@@ -70,6 +77,7 @@ public final class OrderFilledEvent extends DomainEvent {
 
         super(orderId, "Order", sequenceNumber);
         this.orderId           = orderId;
+        this.strategyId        = strategyId;
         this.ibOrderId         = ibOrderId;
         this.symbol            = symbol;
         this.filledQuantity    = filledQuantity;

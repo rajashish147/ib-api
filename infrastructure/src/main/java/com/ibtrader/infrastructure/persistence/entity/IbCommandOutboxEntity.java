@@ -35,8 +35,10 @@ public class IbCommandOutboxEntity {
     @Column(name = "command_type")
     private String commandType;
 
+    @jakarta.persistence.Enumerated(jakarta.persistence.EnumType.STRING)
+    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.NAMED_ENUM)
     @Column(name = "status")
-    private String status;
+    private IbCommandStatus status;
 
     @Column(name = "payload", columnDefinition = "jsonb")
     private String payload;

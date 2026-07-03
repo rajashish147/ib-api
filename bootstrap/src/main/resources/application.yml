@@ -17,7 +17,7 @@ spring:
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/ibtrader}
     username: ${DB_USERNAME:ibtrader}
-    password: ${DB_PASSWORD:ibtrader}
+    password: ${DB_PASSWORD:}
     driver-class-name: org.postgresql.Driver
     hikari:
       pool-name: IbTraderPool
@@ -28,6 +28,7 @@ spring:
       max-lifetime: 1800000
       connection-test-query: SELECT 1
       leak-detection-threshold: 60000
+      auto-commit: false
 
   # ── JPA / Hibernate ─────────────────────────────────────────────────────────
   jpa:
@@ -56,7 +57,7 @@ spring:
     validate-on-migrate: true
     out-of-order: false
     clean-disabled: true            # NEVER allow clean in production
-
+    repair: true
   # ── Jackson ─────────────────────────────────────────────────────────────────
   jackson:
     default-property-inclusion: non_null
@@ -132,12 +133,16 @@ app:
 
   # ── Interactive Brokers Connection ──────────────────────────────────────────
   ib:
+    accounts:
+      default:
+        paper: DUP854695
+        live: DUP854695
     enabled: ${IB_ENABLED:false}
     host: ${IB_HOST:127.0.0.1}
     port: ${IB_PORT:4002}              # 4002 = paper trading gateway; 4001 = live
     client-id: ${IB_CLIENT_ID:1}
     paper-trading: ${IB_PAPER_TRADING:true}
-    account-id: ${IB_ACCOUNT_ID:}      # Required: your IB account number
+    account-id: ${IB_ACCOUNT_ID:DUP854695}      # Required: your IB account number
     connection:
       reconnect-interval-seconds: 30
       heartbeat-interval-seconds: 60

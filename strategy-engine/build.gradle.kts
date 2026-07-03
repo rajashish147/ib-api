@@ -8,7 +8,6 @@ plugins {
 
 dependencies {
     implementation(project(":domain"))
-    implementation(project(":application"))
     implementation(project(":risk"))
 
     implementation(libs.spring.boot.starter.web)

@@ -1,19 +1,27 @@
 package com.ibtrader.infrastructure.broker.ibkr;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ibtrader.domain.event.BrokerConnectedEvent;
 import com.ibtrader.domain.event.BrokerDisconnectedEvent;
+import com.ibtrader.domain.port.outbound.AssetRepository;
 import com.ibtrader.domain.port.outbound.DomainEventPublisher;
+import com.ibtrader.domain.port.outbound.MarketDataCache;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Owns the lifecycle of the optional Interactive Brokers client connection.
@@ -28,8 +36,8 @@ public class IbConnectionManager {
     private final IbApiClient client;
     private final IbEWrapperAdapter wrapper;
     private final DomainEventPublisher eventPublisher;
-    private final AtomicBoolean connected = new AtomicBoolean(false);
-    private final AtomicBoolean connecting = new AtomicBoolean(false);
+    private final ObjectMapper objectMapper;
+    private final AtomicReference<ConnectionState> state = new AtomicReference<>(ConnectionState.DISCONNECTED);
     private final AtomicInteger reconnectAttempts = new AtomicInteger(0);
     private final ScheduledExecutorService scheduler =
             Executors.newSingleThreadScheduledExecutor(runnable -> {
@@ -37,6 +45,11 @@ public class IbConnectionManager {
                 thread.setDaemon(true);
                 return thread;
             });
+
+    private final AssetRepository assetRepository;
+    private final MarketDataCache marketDataCache;
+    private final Map<Integer, UUID> tickerAssetMap = new ConcurrentHashMap<>();
+    private final AtomicInteger nextTickerId = new AtomicInteger(1000);
 
     private ScheduledFuture<?> reconnectFuture;
     private ScheduledFuture<?> heartbeatFuture;
@@ -46,13 +59,21 @@ public class IbConnectionManager {
             IbConnectionProperties properties,
             IbApiClient client,
             IbEWrapperAdapter wrapper,
-            DomainEventPublisher eventPublisher) {
+            DomainEventPublisher eventPublisher,
+            ObjectMapper objectMapper,
+            AssetRepository assetRepository,
+            MarketDataCache marketDataCache) {
 
         this.properties = properties;
         this.client = client;
         this.wrapper = wrapper;
         this.eventPublisher = eventPublisher;
+        this.objectMapper = objectMapper;
+        this.assetRepository = assetRepository;
+        this.marketDataCache = marketDataCache;
         this.wrapper.setDisconnectHandler(this::onDisconnected);
+        this.wrapper.setTickPriceHandler(this::onTickPrice);
+        this.wrapper.setErrorHandler(this::onError);
     }
 
     public synchronized void connect() {
@@ -60,11 +81,13 @@ public class IbConnectionManager {
             log.info("IB adapter is disabled");
             return;
         }
-        if (connected.get() || connecting.get()) {
+        
+        ConnectionState currentState = state.get();
+        if (currentState == ConnectionState.CONNECTED || currentState == ConnectionState.CONNECTING) {
             return;
         }
 
-        connecting.set(true);
+        state.set(currentState == ConnectionState.RECONNECTING ? ConnectionState.RECONNECTING : ConnectionState.CONNECTING);
         wrapper.resetHandshake();
         try {
             client.connect(
@@ -81,8 +104,7 @@ public class IbConnectionManager {
                 throw new IbConnectionException("Timed out waiting for broker handshake");
             }
 
-            connected.set(true);
-            connecting.set(false);
+            state.set(ConnectionState.CONNECTED);
             reconnectAttempts.set(0);
             startHeartbeat();
 
@@ -92,8 +114,10 @@ public class IbConnectionManager {
                     client.serverVersion(),
                     Instant.now()));
             log.info("Connected to IB Gateway at {}", endpoint());
+            
+            subscribeToMarketData();
+            
         } catch (RuntimeException exception) {
-            connecting.set(false);
             client.disconnect();
             log.warn("IB connection attempt failed: {}", exception.getMessage());
             scheduleReconnect();
@@ -101,10 +125,10 @@ public class IbConnectionManager {
     }
 
     public synchronized void onDisconnected(String reason) {
-        boolean wasActive = connected.getAndSet(false) || connecting.getAndSet(false);
+        ConnectionState previousState = state.getAndSet(ConnectionState.DISCONNECTED);
         stopHeartbeat();
         client.disconnect();
-        if (!wasActive) {
+        if (previousState == ConnectionState.DISCONNECTED) {
             return;
         }
 
@@ -114,27 +138,93 @@ public class IbConnectionManager {
                 reason,
                 Instant.now(),
                 reconnectAttempts.get()));
+        log.warn("Disconnected from IB Gateway: {}", reason);
         scheduleReconnect();
+    }
+    
+    private void onError(int id, int errorCode, String errorMsg, String advancedOrderRejectJson) {
+        log.error("IBKR Error {} [{}]: {}", errorCode, id, errorMsg);
+        
+        switch (errorCode) {
+            case 502: // Couldn't connect to TWS. Confirm that "Enable ActiveX and Socket Clients" is enabled
+            case 504: // Not connected
+            case 1100: // Connectivity between IB and TWS has been lost.
+            case 2110: // Connectivity between TWS and server is broken.
+                log.warn("Connection lost/broken due to error code {}", errorCode);
+                if (state.get() == ConnectionState.CONNECTED) {
+                    onDisconnected(errorMsg);
+                }
+                break;
+            case 1101: // Connectivity between IB and TWS has been restored
+            case 2104: // Market data farm connection is OK
+                log.info("Connectivity restored (code {})", errorCode);
+                if (state.get() == ConnectionState.DISCONNECTED) {
+                    scheduleReconnect(); // trigger immediate reconnect
+                }
+                break;
+            default:
+                // Other business errors (order rejections, etc.) are handled by specific handlers
+                break;
+        }
     }
 
     public synchronized void disconnect() {
         stopHeartbeat();
         cancelReconnect();
-        connected.set(false);
-        connecting.set(false);
+        state.set(ConnectionState.DISCONNECTED);
+        tickerAssetMap.clear();
         client.disconnect();
     }
 
     public boolean isConnected() {
-        return connected.get() && client.isConnected();
+        return state.get() == ConnectionState.CONNECTED && client.isConnected();
     }
 
-    public void submitCommand(String payload) {
+    public int submitCommand(String payload) {
         if (!isConnected()) {
             throw new IllegalStateException("Cannot submit command, IBKR not connected.");
         }
-        // TODO: Map payload to EClientSocket methods (e.g., placeOrder, reqMktData)
-        log.info("Mock submitting command to IBKR: {}", payload);
+        try {
+            JsonNode json = objectMapper.readTree(payload);
+            String symbol = json.path("symbol").asText();
+            String side = json.path("side").asText();
+            BigDecimal quantity = json.path("targetQuantity").decimalValue();
+            JsonNode limitPriceNode = json.get("limitPrice");
+            BigDecimal limitPrice = limitPriceNode == null || limitPriceNode.isNull()
+                    ? null
+                    : limitPriceNode.decimalValue();
+            int ibOrderId = wrapper.reserveNextOrderId();
+
+            client.placeStockOrder(ibOrderId, symbol, side, quantity, limitPrice);
+            log.info("Submitted IB order {}: {} {} {}", ibOrderId, side, quantity, symbol);
+            return ibOrderId;
+        } catch (RuntimeException exception) {
+            throw exception;
+        } catch (Exception exception) {
+            throw new IbConnectionException("Unable to submit IB command payload", exception);
+        }
+    }
+
+    private void subscribeToMarketData() {
+        try {
+            assetRepository.findAll().forEach(asset -> {
+                if (asset.isEnabled() && asset.isEquity()) {
+                    int tickerId = nextTickerId.getAndIncrement();
+                    tickerAssetMap.put(tickerId, asset.getId());
+                    client.requestMarketData(tickerId, asset.getSymbol(), asset.getExchange(), asset.getCurrency());
+                    log.info("Requested market data for {} (tickerId: {})", asset.getSymbol(), tickerId);
+                }
+            });
+        } catch (Exception e) {
+            log.error("Failed to subscribe to market data", e);
+        }
+    }
+
+    private void onTickPrice(int tickerId, double price) {
+        UUID assetId = tickerAssetMap.get(tickerId);
+        if (assetId != null && price > 0.0) {
+            marketDataCache.putPrice(assetId, BigDecimal.valueOf(price), Instant.now());
+        }
     }
 
     private void startMessagePump() {
@@ -149,6 +239,10 @@ public class IbConnectionManager {
         }, "ib-message-pump");
         messageThread.setDaemon(true);
         messageThread.start();
+    }
+
+    public void setOrderStatusHandler(java.util.function.BiConsumer<Integer, String> handler) {
+        wrapper.setOrderStatusHandler(handler);
     }
 
     private void scheduleReconnect() {

@@ -65,3 +65,19 @@ tasks.bootJar {
 tasks.jar {
     enabled = false
 }
+
+
+tasks.named<org.springframework.boot.gradle.tasks.run.BootRun>("bootRun") {
+    val envFile = rootProject.file(".env")
+    if (envFile.exists()) {
+        envFile.readLines().forEach {
+            if (it.isNotBlank() && !it.startsWith("#")) {
+                val parts = it.split("=", limit = 2)
+                if (parts.size == 2) {
+                    val value = parts[1].substringBefore("#").trim()
+                    environment(parts[0].trim(), value)
+                }
+            }
+        }
+    }
+}

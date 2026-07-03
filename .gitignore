@@ -47,3 +47,8 @@ docker/data/
 
 # ── Checkstyle cache ──────────────────────────────────────────────────────────
 **/build/tmp/
+
+# ── Miscellaneous ────────────────────────────────────────────────────────────
+*.class
+build-errors.txt
+RepairFlyway.*

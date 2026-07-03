@@ -1,8 +1,11 @@
-package com.ibtrader.domain.engine;
+package com.ibtrader.strategy.engine;
 
+import com.ibtrader.domain.engine.EvaluationContext;
+import com.ibtrader.domain.engine.VariableRegistry;
 import com.ibtrader.domain.model.strategy.ExpressionNode;
 import com.ibtrader.domain.model.strategy.RuleAction;
 import com.ibtrader.domain.model.strategy.TradeSignal;
+import com.ibtrader.domain.port.inbound.RuleEvaluationPort;
 import lombok.RequiredArgsConstructor;
 import java.util.logging.Logger;
 
@@ -18,7 +21,7 @@ import java.util.UUID;
  * Uses the VariableRegistry to dynamically resolve variables.
  */
 @RequiredArgsConstructor
-public class RuleEvaluationEngine {
+public class RuleEvaluationEngine implements RuleEvaluationPort {
 
     private static final Logger LOG = Logger.getLogger(RuleEvaluationEngine.class.getName());
 
@@ -33,6 +36,7 @@ public class RuleEvaluationEngine {
      * @param actions the actions to trigger if the rule evaluates to true
      * @return a list of generated TradeSignals
      */
+    @Override
     public List<TradeSignal> evaluate(EvaluationContext context, ExpressionNode rootNode, List<RuleAction> actions) {
         List<TradeSignal> signals = new ArrayList<>();
         

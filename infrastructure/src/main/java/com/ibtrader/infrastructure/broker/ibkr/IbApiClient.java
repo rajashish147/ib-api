@@ -2,6 +2,7 @@ package com.ibtrader.infrastructure.broker.ibkr;
 
 import org.springframework.stereotype.Component;
 
+import java.math.BigDecimal;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -76,10 +77,78 @@ public class IbApiClient {
         invoke(socket, "reqCurrentTime", new Class<?>[0]);
     }
 
+    public void placeStockOrder(
+            int orderId,
+            String symbol,
+            String side,
+            BigDecimal quantity,
+            BigDecimal limitPrice) {
+
+        requireSocket();
+        try {
+            Class<?> contractType = Class.forName("com.ib.client.Contract");
+            Class<?> orderType = Class.forName("com.ib.client.Order");
+            Class<?> decimalType = Class.forName("com.ib.client.Decimal");
+
+            Object contract = contractType.getConstructor().newInstance();
+            invoke(contract, "symbol", new Class<?>[] {String.class}, symbol);
+            invoke(contract, "secType", new Class<?>[] {String.class}, "STK");
+            invoke(contract, "exchange", new Class<?>[] {String.class}, "SMART");
+            invoke(contract, "currency", new Class<?>[] {String.class}, "USD");
+
+            Object order = orderType.getConstructor().newInstance();
+            invoke(order, "action", new Class<?>[] {String.class}, side);
+            invoke(order, "orderType", new Class<?>[] {String.class}, limitPrice == null ? "MKT" : "LMT");
+            Object ibQuantity = invokeStatic(
+                    decimalType,
+                    "get",
+                    new Class<?>[] {String.class},
+                    quantity.stripTrailingZeros().toPlainString());
+            invoke(order, "totalQuantity", new Class<?>[] {decimalType}, ibQuantity);
+
+            if (limitPrice != null) {
+                invoke(order, "lmtPrice", new Class<?>[] {double.class}, limitPrice.doubleValue());
+            }
+
+            invoke(socket, "placeOrder", new Class<?>[] {int.class, contractType, orderType},
+                    orderId, contract, order);
+        } catch (ClassNotFoundException exception) {
+            throw new IbConnectionException(
+                    "IB API JAR is unavailable. Add a licensed TwsApi*.jar to libs/ "
+                            + "before submitting orders.",
+                    exception);
+        } catch (ReflectiveOperationException exception) {
+            throw new IbConnectionException("Unable to build IB order for " + symbol, exception);
+        }
+    }
+
     public String serverVersion() {
         requireSocket();
         Object version = invoke(socket, "serverVersion", new Class<?>[0]);
         return String.valueOf(version);
+    }
+
+    public void requestMarketData(int tickerId, String symbol, String exchange, String currency) {
+        requireSocket();
+        try {
+            Class<?> contractType = Class.forName("com.ib.client.Contract");
+            Object contract = contractType.getConstructor().newInstance();
+            invoke(contract, "symbol", new Class<?>[] {String.class}, symbol);
+            invoke(contract, "secType", new Class<?>[] {String.class}, "STK");
+            invoke(contract, "exchange", new Class<?>[] {String.class}, exchange != null ? exchange : "SMART");
+            invoke(contract, "currency", new Class<?>[] {String.class}, currency != null ? currency : "USD");
+
+            invoke(socket, "reqMktData",
+                    new Class<?>[] {
+                        int.class, contractType, String.class, 
+                        boolean.class, boolean.class, java.util.List.class
+                    },
+                    tickerId, contract, "", false, false, null);
+        } catch (ClassNotFoundException exception) {
+            throw new IbConnectionException("IB API JAR is unavailable.", exception);
+        } catch (ReflectiveOperationException exception) {
+            throw new IbConnectionException("Unable to request market data for " + symbol, exception);
+        }
     }
 
     public void disconnect() {
@@ -106,6 +175,27 @@ public class IbApiClient {
         try {
             Method method = target.getClass().getMethod(methodName, parameterTypes);
             return method.invoke(target, arguments);
+        } catch (NoSuchMethodException | IllegalAccessException exception) {
+            throw new IbConnectionException(
+                    "IB API method is unavailable: " + methodName, exception);
+        } catch (InvocationTargetException exception) {
+            Throwable cause = exception.getCause();
+            if (cause instanceof RuntimeException runtimeException) {
+                throw runtimeException;
+            }
+            throw new IbConnectionException("IB API call failed: " + methodName, cause);
+        }
+    }
+
+    private static Object invokeStatic(
+            Class<?> targetType,
+            String methodName,
+            Class<?>[] parameterTypes,
+            Object... arguments) {
+
+        try {
+            Method method = targetType.getMethod(methodName, parameterTypes);
+            return method.invoke(null, arguments);
         } catch (NoSuchMethodException | IllegalAccessException exception) {
             throw new IbConnectionException(
                     "IB API method is unavailable: " + methodName, exception);

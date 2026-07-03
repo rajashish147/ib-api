@@ -4,6 +4,7 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.ToString;
 
+import java.math.BigDecimal;
 import java.util.UUID;
 
 /**
@@ -11,7 +12,7 @@ import java.util.UUID;
  * Strategies have versions and contain execution metadata.
  */
 @Getter
-@Builder
+@Builder(toBuilder = true)
 @ToString
 public class TradingStrategy {
 
@@ -26,5 +27,20 @@ public class TradingStrategy {
     
     // LIVE, PAPER, BACKTEST, SIMULATION, DISABLED
     private final String executionMode;
+    
+    private final BigDecimal buyThreshold;
+    private final BigDecimal sellThreshold;
+    private final StrategyState state;
+    private final java.util.List<BasketTarget> targets;
+    
+    // Helper to transition state safely
+    public TradingStrategy withState(StrategyState newState) {
+        return TradingStrategy.builder()
+                .id(id).versionId(versionId).name(name).description(description)
+                .priority(priority).enabled(enabled).cooldownMinutes(cooldownMinutes)
+                .riskProfile(riskProfile).executionMode(executionMode)
+                .buyThreshold(buyThreshold).sellThreshold(sellThreshold)
+                .state(newState).targets(targets).build();
+    }
 
 }

@@ -8,11 +8,14 @@ plugins {
 
 dependencies {
     api(project(":domain"))
+    implementation(project(":strategy-engine"))
+    implementation(project(":risk"))
 
     // Spring context for @Component, @Transactional, @Validated
     implementation(libs.spring.boot.starter.web)
     implementation(libs.spring.boot.starter.validation)
     implementation(libs.spring.boot.starter.aop)
+    implementation(libs.spring.boot.starter.data.jpa)
 
     compileOnly(libs.lombok)
     annotationProcessor(libs.lombok)

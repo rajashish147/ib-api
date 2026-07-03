@@ -56,7 +56,7 @@ public class AuditLogEntity {
     @Column(name = "details")
     private String details;
 
-    @Column(name = "ip_address")
+    @Column(name = "ip_address", columnDefinition = "inet")
     private String ipAddress;
 
     @Column(name = "occurred_at")

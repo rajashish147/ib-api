@@ -10,4 +10,5 @@ import java.util.UUID;
 @Repository
 public interface EvaluationHistoryJpaRepository extends JpaRepository<EvaluationHistoryEntity, UUID> {
     List<EvaluationHistoryEntity> findByStrategyId(UUID strategyId);
+    java.util.Optional<EvaluationHistoryEntity> findFirstByStrategyIdOrderByEvaluationTimeDesc(UUID strategyId);
 }

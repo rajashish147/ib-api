@@ -9,5 +9,9 @@ import java.util.UUID;
 
 @Repository
 public interface AuditLogJpaRepository extends JpaRepository<AuditLogEntity, UUID> {
-    List<AuditLogEntity> findByEntityTypeAndEntityId(String entityType, UUID entityId);
+    List<AuditLogEntity> findByEntityTypeAndEntityIdOrderByOccurredAtDesc(String entityType, UUID entityId);
+    List<AuditLogEntity> findByCorrelationIdOrderByOccurredAtDesc(String correlationId);
+
+    @org.springframework.data.jpa.repository.Query("SELECT a FROM AuditLogEntity a ORDER BY a.occurredAt DESC")
+    List<AuditLogEntity> findRecent(org.springframework.data.domain.Pageable pageable);
 }

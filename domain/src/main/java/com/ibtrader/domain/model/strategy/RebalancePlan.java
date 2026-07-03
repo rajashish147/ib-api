@@ -35,6 +35,7 @@ import java.util.UUID;
  */
 @Getter
 @EqualsAndHashCode(of = "id")
+@lombok.Builder
 public class RebalancePlan {
 
     // -------------------------------------------------------------------------

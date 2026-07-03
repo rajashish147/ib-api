@@ -36,6 +36,10 @@ public class TradingStrategyEntity {
     private Integer priority;
     private boolean enabled;
     private Integer cooldownMinutes;
+    
+    private java.math.BigDecimal buyThreshold;
+    private java.math.BigDecimal sellThreshold;
+    private String state;
 
     private Instant createdAt;
     private Instant updatedAt;

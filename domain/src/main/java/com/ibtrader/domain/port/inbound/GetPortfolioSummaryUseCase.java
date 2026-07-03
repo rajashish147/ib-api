@@ -12,13 +12,15 @@ import com.ibtrader.domain.model.portfolio.Portfolio;
  */
 public interface GetPortfolioSummaryUseCase {
 
+    record Query(String accountId) {}
+
     /**
      * Returns the {@link Portfolio} associated with the given account identifier.
      *
-     * @param accountId the IB account string (e.g. {@code "DU1234567"}); must not be blank
+     * @param query the query containing the IB account string; must not be null
      * @return the portfolio aggregate for the specified account; never {@code null}
      * @throws com.ibtrader.domain.exception.DomainException if no portfolio is found
      *         for the given account ID
      */
-    Portfolio execute(String accountId);
+    Portfolio execute(Query query);
 }
