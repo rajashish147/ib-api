@@ -1,48 +1,47 @@
 # IBKR Portfolio Management & Automated Trading Platform
 
-An institutional-grade, automated portfolio management and trading platform for Interactive Brokers. Built with modern Java, Spring Boot, and designed around strict Hexagonal Architecture principles.
+Single-user trading control center for Interactive Brokers. The codebase is organized as a multi-module Spring Boot backend plus an Angular 20 frontend that talks only to the backend REST and actuator endpoints.
 
-## Features
+## What It Does
 
-- **Decoupled Architecture**: Pure Java Domain models decoupled from Spring and Database persistence.
-- **Rule-Based Engine**: Dynamic expression tree evaluation for complex quantitative strategies without hardcoding logic.
-- **Portfolio-Level Context**: Operates on the entire portfolio state (Net Liquidation Value, Margin Usage, Cash Balance), not just single-ticker technical analysis.
-- **Risk Engine**: Pre-trade limits, circuit breakers, max drawdown protection, and concentration caps.
-- **IB Gateway Outbox**: Dedicated worker for pushing resilient, asynchronous order executions via IB Gateway or TWS.
-- **Orchestration**: Fully centralized execution loop (`Snapshot -> Analyze -> Evaluate -> Decide -> Plan -> Persist`) ensuring consistency across cron jobs, manual triggers, and tick data.
+- Portfolio snapshot and history views
+- Strategy management for basket trading rules
+- Manual rebalance approvals
+- Trading engine trigger/pause/resume/status controls
+- Operational monitoring and runtime visibility
 
-## Project Structure (Hexagonal Architecture)
+## Project Structure
 
-The project is broken into strict, decoupled Gradle modules:
+* `domain` - Pure business logic, aggregates, and engine rules.
+* `infrastructure` - Persistence, adapters, and external integrations.
+* `application` - Orchestration and use-case coordination.
+* `api` - REST controllers and request/response DTOs.
+* `scheduler` - Scheduled execution hooks.
+* `bootstrap` - Spring Boot entry point and runtime configuration.
+* `frontend` - Angular operations console.
 
-* `domain` - Pure business logic, Aggregate Roots, Expression Trees, and Engine logic (No Spring!).
-* `infrastructure` - JPA Repositories, MapStruct Mappers, Flyway migrations, and IBKR API adapters.
-* `application` - Core Application Services (e.g., `TradingEngineOrchestrator`) coordinating the pipeline.
-* `api` - (Upcoming) REST Controllers, Request/Response DTOs, OpenAPI specifications.
-* `scheduler` - Quartz/Spring Schedulers isolating execution triggers from business logic.
-* `bootstrap` - The Spring Boot execution context, combining all modules and providing configuration.
+## Run
 
-## Getting Started
-
-Please see the [Setup Guide](setup.md) for step-by-step instructions on setting up PostgreSQL, IB Gateway, and starting the platform.
-
-### Quick Start
+Backend:
 
 ```bash
-# Start the application
 ./gradlew bootRun
 ```
 
-Upon startup, Flyway will dynamically generate all 20+ tables required for the trading engine.
+Frontend:
 
-## Status
+```bash
+cd frontend
+npm install
+npm start
+```
 
-**Alpha / Under Active Development**
-- [x] Phase 1: Foundation (Gradle, Flyway, DB Schema)
-- [x] Phase 2: Domain Modeling & Rule Engine Trees
-- [x] Phase 3: Engine Pipeline (Analysis, Evaluation, Decision, Planning)
-- [x] Phase 4: Bootstrapping & Orchestration (JPA Adapters, Outbox Worker)
-- [ ] Phase 5: REST API & Management UI
-- [ ] Phase 6: EWrapper Callbacks (Execution Reports & Market Data)
+The frontend proxies `/api` to `http://localhost:8080` and `/actuator` to `http://localhost:8081`.
 
-> **WARNING**: This platform can submit real orders. Ensure `paper-trading: true` is configured in `application.yml` and only use simulated accounts.
+## Current Scope
+
+- No login/JWT layer in the current source of truth.
+- The UI is a single-operator terminal, not a broker clone or SaaS product.
+- The actuator port is used for health and monitoring data.
+
+> **WARNING**: This platform can submit real orders. Use paper trading or simulated accounts only.
