@@ -42,7 +42,8 @@ public class PortfolioController {
             @RequestParam(defaultValue = "50") int limit) {
 
         String resolvedAccountId = resolveAccountId(accountId);
-        return ResponseEntity.ok(getSnapshotHistoryUseCase.execute(new GetSnapshotHistoryUseCase.Query(resolvedAccountId, limit)));
+        var query = new GetSnapshotHistoryUseCase.Query(resolvedAccountId, limit);
+        return ResponseEntity.ok(getSnapshotHistoryUseCase.execute(query));
     }
 
     @PostMapping("/reconcile")

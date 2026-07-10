@@ -52,3 +52,9 @@ docker/data/
 *.class
 build-errors.txt
 RepairFlyway.*
+
+target/
+maven/
+maven.zip
+
+**/target/
