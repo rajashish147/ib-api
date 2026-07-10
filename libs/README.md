@@ -13,7 +13,7 @@ app:
 
 The adapter loads the SDK reflectively only when explicitly enabled. This keeps
 the licensed SDK outside source control and allows a clean checkout to run the
-full Gradle build.
+full Maven build.
 
 ## Enabling the IB adapter
 
@@ -37,9 +37,15 @@ After placing the JAR:
 d:\Codebase\ib-api\libs\TwsApi.jar
 ```
 
-The `infrastructure` Gradle module includes it at runtime via:
-```kotlin
-implementation(fileTree(mapOf("dir" to "${rootDir}/libs", "include" to listOf("TwsApi*.jar"))))
+The `infrastructure` Maven module includes it at runtime via:
+```xml
+<dependency>
+    <groupId>com.ib</groupId>
+    <artifactId>twsapi</artifactId>
+    <version>10.19</version>
+    <scope>system</scope>
+    <systemPath>${project.basedir}/../libs/TwsApi.jar</systemPath>
+</dependency>
 ```
 
 ### Alternative: Local Maven Install
@@ -53,9 +59,13 @@ mvn install:install-file \
   -Dversion=10.19 \
   -Dpackaging=jar
 ```
-Then update `infrastructure/build.gradle.kts` to use:
-```kotlin
-implementation("com.interactivebrokers:tws-api:10.19")
+Then update `infrastructure/pom.xml` to use:
+```xml
+<dependency>
+    <groupId>com.interactivebrokers</groupId>
+    <artifactId>tws-api</artifactId>
+    <version>10.19</version>
+</dependency>
 ```
 
 ### API Version Matrix

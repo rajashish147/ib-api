@@ -25,7 +25,8 @@ Single-user trading control center for Interactive Brokers. The codebase is orga
 Backend:
 
 ```bash
-./gradlew bootRun
+mvn clean install
+mvn -pl bootstrap spring-boot:run
 ```
 
 Frontend:
