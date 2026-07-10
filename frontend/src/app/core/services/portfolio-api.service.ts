@@ -12,4 +12,8 @@ export class PortfolioApiService extends ApiBaseService {
   getSnapshots(limit = 50, accountId?: string): Observable<readonly PortfolioSnapshotDto[]> {
     return this.get<readonly PortfolioSnapshotDto[]>('/portfolio/snapshots', { limit, accountId });
   }
+
+  reconcilePositions(): Observable<{ message: string; status: string }> {
+    return this.post<{ message: string; status: string }>('/portfolio/reconcile');
+  }
 }

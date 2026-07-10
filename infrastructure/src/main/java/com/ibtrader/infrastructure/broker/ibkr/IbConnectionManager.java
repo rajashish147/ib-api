@@ -12,6 +12,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
@@ -48,6 +49,7 @@ public class IbConnectionManager {
 
     private final AssetRepository assetRepository;
     private final MarketDataCache marketDataCache;
+    private final PositionPersistenceService positionPersistenceService;
     private final Map<Integer, UUID> tickerAssetMap = new ConcurrentHashMap<>();
     private final AtomicInteger nextTickerId = new AtomicInteger(1000);
 
@@ -62,7 +64,8 @@ public class IbConnectionManager {
             DomainEventPublisher eventPublisher,
             ObjectMapper objectMapper,
             AssetRepository assetRepository,
-            MarketDataCache marketDataCache) {
+            MarketDataCache marketDataCache,
+            PositionPersistenceService positionPersistenceService) {
 
         this.properties = properties;
         this.client = client;
@@ -71,6 +74,7 @@ public class IbConnectionManager {
         this.objectMapper = objectMapper;
         this.assetRepository = assetRepository;
         this.marketDataCache = marketDataCache;
+        this.positionPersistenceService = positionPersistenceService;
         this.wrapper.setDisconnectHandler(this::onDisconnected);
         this.wrapper.setTickPriceHandler(this::onTickPrice);
         this.wrapper.setErrorHandler(this::onError);
@@ -142,28 +146,50 @@ public class IbConnectionManager {
         scheduleReconnect();
     }
     
+
     private void onError(int id, int errorCode, String errorMsg, String advancedOrderRejectJson) {
-        log.error("IBKR Error {} [{}]: {}", errorCode, id, errorMsg);
-        
         switch (errorCode) {
-            case 502: // Couldn't connect to TWS. Confirm that "Enable ActiveX and Socket Clients" is enabled
-            case 504: // Not connected
-            case 1100: // Connectivity between IB and TWS has been lost.
-            case 2110: // Connectivity between TWS and server is broken.
-                log.warn("Connection lost/broken due to error code {}", errorCode);
+            // ── Informational / advisory codes ───────────────────────────────────────
+            case 2100: case 2101: case 2102: case 2103:
+            case 2104: case 2105: case 2106: case 2107:
+            case 2108: case 2109: case 2110: case 2119:
+            case 2150: case 2157: case 2158:
+                log.debug("IBKR info [{}] id={}: {}", errorCode, id, errorMsg);
+                // 2104/2106 = market data farm OK; restore connectivity if needed
+                if ((errorCode == 2104 || errorCode == 2106) && state.get() == ConnectionState.DISCONNECTED) {
+                    scheduleReconnect();
+                }
+                break;
+
+            // ── Delayed-data / subscription advisory (paper accounts) ───────────────
+            case 10089: case 10090: case 10197:
+                log.debug("IBKR subscription advisory [{}] id={}: {}", errorCode, id, errorMsg);
+                break;
+
+            // ── Connection lost ──────────────────────────────────────────────────────
+            case 502: case 504: case 1100: case 1300:
+                log.warn("IBKR connection lost [{}]: {}", errorCode, errorMsg);
                 if (state.get() == ConnectionState.CONNECTED) {
                     onDisconnected(errorMsg);
                 }
                 break;
-            case 1101: // Connectivity between IB and TWS has been restored
-            case 2104: // Market data farm connection is OK
-                log.info("Connectivity restored (code {})", errorCode);
+
+            // ── Connectivity restored ────────────────────────────────────────────────
+            case 1101: case 1102:
+                log.info("IBKR connectivity restored [{}]: {}", errorCode, errorMsg);
                 if (state.get() == ConnectionState.DISCONNECTED) {
-                    scheduleReconnect(); // trigger immediate reconnect
+                    scheduleReconnect();
                 }
                 break;
+
+            // ── Real errors (order rejection, invalid contract, etc.) ────────────────
             default:
-                // Other business errors (order rejections, etc.) are handled by specific handlers
+                if (errorCode > 0) {
+                    log.warn("IBKR error [{}] id={}: {}", errorCode, id, errorMsg);
+                } else {
+                    // Negative / unknown codes — log at debug
+                    log.debug("IBKR callback [{}] id={}: {}", errorCode, id, errorMsg);
+                }
                 break;
         }
     }
@@ -243,6 +269,24 @@ public class IbConnectionManager {
 
     public void setOrderStatusHandler(java.util.function.BiConsumer<Integer, String> handler) {
         wrapper.setOrderStatusHandler(handler);
+    }
+
+    /**
+     * Triggers IB to stream back all current open positions via position() callbacks.
+     * Results are upserted into the positions table keyed by (portfolioId, assetId).
+     */
+    public void requestPositions() {
+        if (!isConnected()) {
+            log.warn("Cannot request positions — IB not connected");
+            return;
+        }
+        wrapper.setPositionHandler(this::onPosition);
+        client.requestPositions();
+        log.info("Sent reqPositions to IB Gateway");
+    }
+
+    private void onPosition(String account, String symbol, String currency, double quantity, double avgCost) {
+        positionPersistenceService.upsertPosition(account, symbol, currency, quantity, avgCost);
     }
 
     private void scheduleReconnect() {

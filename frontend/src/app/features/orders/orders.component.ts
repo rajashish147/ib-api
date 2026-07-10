@@ -14,20 +14,28 @@ import { EmptyStateComponent } from '../../shared/components/empty-state.compone
   template: `
     <section class="orders-page grid">
       <mat-card class="surface card section-card">
-        <div>
-          <div class="page-title">Approvals & Engine</div>
-          <div class="page-subtitle">Manual plan approvals and the execution pipeline controls exposed by the backend.</div>
+        <div class="page-info">
+          <div class="page-title">Orders &amp; Approvals</div>
+          <div class="page-subtitle">Manual plan approvals and execution pipeline controls.</div>
         </div>
         <div class="actions">
-          <button mat-stroked-button (click)="refresh()">Refresh queue</button>
-          <button mat-flat-button color="primary" (click)="triggerPipeline()">Run pipeline</button>
-          <button mat-stroked-button (click)="pauseEngine()">Pause</button>
-          <button mat-stroked-button (click)="resumeEngine()">Resume</button>
+          <button mat-stroked-button (click)="refresh()">
+            <mat-icon>refresh</mat-icon> Refresh queue
+          </button>
+          <button mat-flat-button color="primary" (click)="triggerPipeline()">
+            <mat-icon>play_arrow</mat-icon> Run pipeline
+          </button>
+          <button mat-stroked-button (click)="pauseEngine()">
+            <mat-icon>pause</mat-icon> Pause
+          </button>
+          <button mat-stroked-button (click)="resumeEngine()">
+            <mat-icon>play_circle</mat-icon> Resume
+          </button>
         </div>
       </mat-card>
 
       <mat-card class="surface card status-card">
-        <div>
+        <div class="status-left">
           <div class="status-label">Engine status</div>
           <div class="status-value">{{ engineStatus() }}</div>
         </div>
@@ -73,14 +81,17 @@ import { EmptyStateComponent } from '../../shared/components/empty-state.compone
   `,
   styles: [`
     .orders-page { gap: 1rem; }
-    .section-card { display: flex; justify-content: space-between; align-items: end; gap: 1rem; padding: 1rem; }
-    .page-title { font-size: 1.15rem; font-weight: 800; }
+    .section-card { display: flex; justify-content: space-between; align-items: center; gap: 1.5rem; padding: 1.25rem 1.5rem; flex-wrap: wrap; }
+    .page-info { flex: 1; min-width: 200px; }
+    .page-title { font-size: 1.25rem; font-weight: 800; }
     .page-subtitle, .ticket-note, .muted { color: var(--app-text-muted); }
-    .actions { display: flex; gap: 0.75rem; flex-wrap: wrap; }
-    .status-card { padding: 1rem; display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
-    .status-label { color: var(--app-text-muted); font-size: 0.88rem; }
-    .status-value { font-size: 1.5rem; font-weight: 800; text-transform: uppercase; }
-    .status-note { color: var(--app-text-muted); }
+    .page-subtitle { margin-top: 0.25rem; font-size: 0.9rem; }
+    .actions { display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: center; }
+    .status-card { padding: 1.25rem 1.5rem; display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
+    .status-left { display: grid; gap: 0.2rem; }
+    .status-label { color: var(--app-text-muted); font-size: 0.82rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
+    .status-value { font-size: 1.4rem; font-weight: 800; text-transform: uppercase; color: var(--app-positive); }
+    .status-note { color: var(--app-text-muted); font-size: 0.9rem; }
     .list-card, .ticket-card { padding: 1rem; }
     .approval-row { width: 100%; display: flex; justify-content: space-between; gap: 1rem; padding: 1rem 0; border: 0; border-bottom: 1px solid var(--app-border); background: transparent; color: inherit; text-align: left; cursor: pointer; }
     .approval-row:last-child { border-bottom: 0; }
@@ -109,42 +120,66 @@ export class OrdersComponent {
   }
 
   refresh(): void {
-    this.approvalApi.getPendingApprovals().subscribe((approvals) => this.approvals.set(approvals));
-    this.engineApi.getStatus().subscribe((status) => {
-      this.engineStatus.set(status.status);
-      this.engineMessage.set(status.message);
+    this.approvalApi.getPendingApprovals().subscribe({
+      next: (approvals) => this.approvals.set(approvals),
+      error: () => { /* handled by interceptor */ }
+    });
+    this.engineApi.getStatus().subscribe({
+      next: (status) => {
+        this.engineStatus.set(status.status);
+        this.engineMessage.set(status.message);
+      },
+      error: () => {
+        this.engineStatus.set('ERROR');
+        this.engineMessage.set('Could not reach engine status endpoint.');
+      }
     });
   }
 
   triggerPipeline(): void {
-    this.engineApi.triggerPipeline().subscribe();
+    this.engineApi.triggerPipeline().subscribe({
+      next: () => this.refresh(),
+      error: () => { /* handled by interceptor */ }
+    });
   }
 
   pauseEngine(): void {
-    this.engineApi.pause().subscribe((status) => {
-      this.engineStatus.set(status.status);
-      this.engineMessage.set('Engine paused');
+    this.engineApi.pause().subscribe({
+      next: (status) => {
+        this.engineStatus.set(status.status);
+        this.engineMessage.set('Engine paused');
+      },
+      error: () => { /* handled by interceptor */ }
     });
   }
 
   resumeEngine(): void {
-    this.engineApi.resume().subscribe((status) => {
-      this.engineStatus.set(status.status);
-      this.engineMessage.set('Engine running');
+    this.engineApi.resume().subscribe({
+      next: (status) => {
+        this.engineStatus.set(status.status);
+        this.engineMessage.set('Engine running');
+      },
+      error: () => { /* handled by interceptor */ }
     });
   }
 
   approve(plan: RebalancePlanDto): void {
-    this.approvalApi.approvePlan(plan.id).subscribe(() => {
-      this.selectedApproval.set(null);
-      this.refresh();
+    this.approvalApi.approvePlan(plan.id).subscribe({
+      next: () => {
+        this.selectedApproval.set(null);
+        this.refresh();
+      },
+      error: () => { /* handled by interceptor */ }
     });
   }
 
   reject(plan: RebalancePlanDto): void {
-    this.approvalApi.rejectPlan(plan.id).subscribe(() => {
-      this.selectedApproval.set(null);
-      this.refresh();
+    this.approvalApi.rejectPlan(plan.id).subscribe({
+      next: () => {
+        this.selectedApproval.set(null);
+        this.refresh();
+      },
+      error: () => { /* handled by interceptor */ }
     });
   }
 

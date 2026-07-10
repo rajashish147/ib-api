@@ -1,7 +1,8 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, inject, OnInit, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
 import { ChartData } from 'chart.js';
-import { forkJoin } from 'rxjs';
+import { catchError, forkJoin, interval, Observable, of, retry, startWith, timer } from 'rxjs';
 import { MATERIAL_IMPORTS } from '../../shared/material.imports';
 import { StatCardComponent } from '../../shared/components/stat-card.component';
 import { ChartCardComponent } from '../../shared/components/chart-card.component';
@@ -12,6 +13,7 @@ import { PortfolioApiService } from '../../core/services/portfolio-api.service';
 import { StrategyApiService } from '../../core/services/strategy-api.service';
 import { ApprovalApiService } from '../../core/services/approval-api.service';
 import { PortfolioDto, PortfolioSnapshotDto } from '../../core/models/api.models';
+import type { StatCardState } from '../../shared/components/stat-card.component';
 
 @Component({
   selector: 'app-dashboard',
@@ -20,19 +22,19 @@ import { PortfolioDto, PortfolioSnapshotDto } from '../../core/models/api.models
   template: `
     <section class="dashboard grid">
       <div class="stats-grid">
-        <app-stat-card label="Portfolio Value" [value]="portfolioValue()" [trend]="portfolioTrend()" icon="account_balance_wallet"></app-stat-card>
-        <app-stat-card label="Cash Balance" [value]="cashBalance()" trend="Available now" icon="savings"></app-stat-card>
-        <app-stat-card label="Buying Power" [value]="buyingPower()" trend="Margin aware" icon="trending_up"></app-stat-card>
-        <app-stat-card label="Today's PnL" [value]="todayPnl()" [trend]="todayPnlTrend()" icon="query_stats"></app-stat-card>
-        <app-stat-card label="Pending Approvals" [value]="pendingApprovals()" trend="Manual review queue" icon="receipt_long"></app-stat-card>
-        <app-stat-card label="Connection Status" [value]="connectionStatus()" trend="REST-backed" icon="cloud_done"></app-stat-card>
+        <app-stat-card label="Portfolio Value" [value]="portfolioValue()" [trend]="portfolioTrend()" icon="account_balance_wallet" [state]="portfolioState()"></app-stat-card>
+        <app-stat-card label="Cash Balance" [value]="cashBalance()" trend="Available now" icon="savings" [state]="portfolioState()"></app-stat-card>
+        <app-stat-card label="Buying Power" [value]="buyingPower()" trend="Margin aware" icon="trending_up" [state]="portfolioState()"></app-stat-card>
+        <app-stat-card label="Today's PnL" [value]="todayPnl()" [trend]="todayPnlTrend()" icon="query_stats" [state]="portfolioState()"></app-stat-card>
+        <app-stat-card label="Pending Approvals" [value]="pendingApprovals()" trend="Manual review queue" icon="receipt_long" [state]="approvalsState()"></app-stat-card>
+        <app-stat-card label="Connection Status" [value]="connectionStatus()" trend="REST-backed" icon="cloud_done" [state]="engineState()"></app-stat-card>
       </div>
 
       @if (loaded()) {
         <div class="charts-grid">
-          <app-chart-card title="Portfolio Allocation" subtitle="By open positions" chartType="doughnut" [chartData]="allocationChart()"></app-chart-card>
-          <app-chart-card title="Daily PnL" subtitle="Snapshot series from portfolio history" chartType="line" [chartData]="pnlChart()"></app-chart-card>
-          <app-chart-card title="Asset Allocation" subtitle="Current weights" chartType="bar" [chartData]="assetChart()"></app-chart-card>
+          <app-chart-card title="Portfolio Allocation" subtitle="By open positions" chartType="doughnut" [chartData]="allocationChart()" [error]="portfolioError()"></app-chart-card>
+          <app-chart-card title="Daily PnL" subtitle="Snapshot series from portfolio history" chartType="line" [chartData]="pnlChart()" [error]="portfolioError()"></app-chart-card>
+          <app-chart-card title="Asset Allocation" subtitle="Current weights" chartType="bar" [chartData]="assetChart()" [error]="portfolioError()"></app-chart-card>
         </div>
 
         <mat-card class="surface card timeline-card">
@@ -71,12 +73,13 @@ import { PortfolioDto, PortfolioSnapshotDto } from '../../core/models/api.models
   `],
   changeDetection: ChangeDetectionStrategy.OnPush
 })
-export class DashboardComponent {
-  private readonly portfolioApi = inject(PortfolioApiService);
-  private readonly strategyApi = inject(StrategyApiService);
-  private readonly approvalApi = inject(ApprovalApiService);
-  private readonly engineApi = inject(EngineApiService);
+export class DashboardComponent implements OnInit {
+  private readonly portfolioApi  = inject(PortfolioApiService);
+  private readonly strategyApi   = inject(StrategyApiService);
+  private readonly approvalApi   = inject(ApprovalApiService);
+  private readonly engineApi     = inject(EngineApiService);
   private readonly monitoringApi = inject(MonitoringApiService);
+  private readonly destroyRef    = inject(DestroyRef);
 
   private readonly portfolioSignal = signal<PortfolioDto | null>(null);
   private readonly snapshotsSignal = signal<readonly PortfolioSnapshotDto[]>([]);
@@ -84,16 +87,34 @@ export class DashboardComponent {
   private readonly pendingApprovalsSignal = signal(0);
   private readonly engineStatusSignal = signal('unknown');
 
-  readonly loaded = this.loadedSignal.asReadonly();
+  private readonly portfolioErrorSignal = signal(false);
+  private readonly approvalsErrorSignal = signal(false);
+  private readonly engineErrorSignal = signal(false);
 
-  constructor() {
+  readonly lastUpdated = signal<Date | null>(null);
+
+  readonly loaded = this.loadedSignal.asReadonly();
+  readonly portfolioError = this.portfolioErrorSignal.asReadonly();
+
+  ngOnInit(): void {
+    // Auto-refresh every 30s; startWith(0) fires immediately on first load
+    interval(30_000)
+      .pipe(startWith(0), takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => this.loadAll());
+  }
+
+  private loadAll(): void {
+    // retryWhen: up to 3 attempts with 2s gap — gives backend time to warm up
+    const withRetry = <T>(obs: Observable<T>) =>
+      obs.pipe(retry({ count: 3, delay: (_, n) => timer(n * 2000) }));
+
     forkJoin({
-      portfolio: this.portfolioApi.getPortfolio(),
-      snapshots: this.portfolioApi.getSnapshots(24),
-      strategies: this.strategyApi.getActiveStrategies(),
-      approvals: this.approvalApi.getPendingApprovals(),
-      engine: this.engineApi.getStatus(),
-      health: this.monitoringApi.getHealth().pipe()
+      portfolio: withRetry(this.portfolioApi.getPortfolio()).pipe(catchError(() => { this.portfolioErrorSignal.set(true); return of(null); })),
+      snapshots: withRetry(this.portfolioApi.getSnapshots(24)).pipe(catchError(() => of([] as PortfolioSnapshotDto[]))),
+      strategies: withRetry(this.strategyApi.getActiveStrategies()).pipe(catchError(() => of([]))),
+      approvals: withRetry(this.approvalApi.getPendingApprovals()).pipe(catchError(() => { this.approvalsErrorSignal.set(true); return of([]); })),
+      engine: withRetry(this.engineApi.getStatus()).pipe(catchError(() => { this.engineErrorSignal.set(true); return of({ status: 'error', message: '' }); })),
+      health: withRetry(this.monitoringApi.getHealth()).pipe(catchError(() => of({ status: 'DOWN' })))
     }).subscribe({
       next: (result) => {
         this.portfolioSignal.set(result.portfolio);
@@ -101,9 +122,21 @@ export class DashboardComponent {
         this.pendingApprovalsSignal.set(result.approvals.length);
         this.engineStatusSignal.set(result.engine.status);
         this.loadedSignal.set(true);
-      },
-      error: () => this.loadedSignal.set(true)
+        this.lastUpdated.set(new Date());
+      }
     });
+  }
+
+  portfolioState(): StatCardState {
+    return this.portfolioErrorSignal() ? 'error' : this.portfolioSignal() === null && !this.loadedSignal() ? 'loading' : 'ok';
+  }
+
+  approvalsState(): StatCardState {
+    return this.approvalsErrorSignal() ? 'error' : !this.loadedSignal() ? 'loading' : 'ok';
+  }
+
+  engineState(): StatCardState {
+    return this.engineErrorSignal() ? 'error' : !this.loadedSignal() ? 'loading' : 'ok';
   }
 
   portfolioValue(): string {

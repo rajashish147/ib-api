@@ -23,11 +23,17 @@ public class IbEWrapperAdapter implements InvocationHandler {
     private volatile java.util.function.BiConsumer<Integer, Double> tickPriceHandler = (id, price) -> { };
     private volatile java.util.function.BiConsumer<Integer, String> orderStatusHandler = (id, status) -> { };
     private volatile ErrorHandler errorHandler = (id, code, msg, advanced) -> { };
+    private volatile PositionHandler positionHandler = (acc, sym, cur, qty, cost) -> { };
     private volatile int nextValidOrderId;
     
     @FunctionalInterface
     public interface ErrorHandler {
         void onError(int id, int errorCode, String errorMsg, String advancedOrderRejectJson);
+    }
+
+    @FunctionalInterface
+    public interface PositionHandler {
+        void onPosition(String account, String symbol, String currency, double quantity, double avgCost);
     }
 
     Object createProxy(Class<?> wrapperType) {
@@ -51,6 +57,10 @@ public class IbEWrapperAdapter implements InvocationHandler {
 
     void setErrorHandler(ErrorHandler errorHandler) {
         this.errorHandler = errorHandler;
+    }
+
+    void setPositionHandler(PositionHandler positionHandler) {
+        this.positionHandler = positionHandler;
     }
 
     void resetHandshake() {
@@ -120,11 +130,45 @@ public class IbEWrapperAdapter implements InvocationHandler {
                     log.debug("IB callback error: {}", args == null ? "" : java.util.Arrays.toString(args));
                 }
             }
+            case "position" -> {
+                // void position(String account, Contract contract, Decimal pos, double avgCost)
+                if (args != null && args.length >= 4) {
+                    try {
+                        String account = (String) args[0];
+                        Object contract = args[1];
+                        Object posDecimal = args[2];
+                        double avgCost = args[3] instanceof Double d ? d : ((Number) args[3]).doubleValue();
+                        String symbol = readContractField(contract, "symbol", "m_symbol");
+                        String currency = readContractField(contract, "currency", "m_currency");
+                        double qty = Double.parseDouble(posDecimal.toString());
+                        positionHandler.onPosition(account, symbol, currency, qty, avgCost);
+                    } catch (Exception e) {
+                        log.debug("Failed to parse position callback: {}", e.getMessage());
+                    }
+                }
+            }
             default -> {
                 // Other callbacks are intentionally ignored until their adapters exist.
             }
         }
         return defaultValue(method.getReturnType());
+    }
+
+    /** Try fieldName first, then legacy fieldName as fallback, using both field access and getter method. */
+    private static String readContractField(Object contract, String modern, String legacy) throws Exception {
+        for (String name : new String[]{modern, legacy}) {
+            try {
+                java.lang.reflect.Field f = contract.getClass().getField(name);
+                Object val = f.get(contract);
+                if (val instanceof String s) return s;
+            } catch (NoSuchFieldException ignored) { /* try next */ }
+            try {
+                java.lang.reflect.Method m = contract.getClass().getMethod(name);
+                Object val = m.invoke(contract);
+                if (val instanceof String s) return s;
+            } catch (NoSuchMethodException ignored) { /* try next */ }
+        }
+        return "";
     }
 
     private static Object defaultValue(Class<?> returnType) {

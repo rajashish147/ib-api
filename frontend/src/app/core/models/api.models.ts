@@ -3,11 +3,23 @@ export interface MoneyDto {
   readonly currency: string;
 }
 
+export interface MarketDataQuoteDto {
+  readonly assetId: string;
+  readonly symbol: string;
+  readonly currency: string | null;
+  readonly exchange: string | null;
+  readonly assetClass: string | null;
+  readonly lastPrice: number | null;
+  readonly priceAt: string | null;
+  readonly stale: boolean;
+}
+
 export interface PositionDto {
   readonly id: string;
   readonly portfolioId: string;
   readonly assetId: string;
   readonly symbol: string;
+  readonly assetClass?: string | null;
   readonly quantity: string | number;
   readonly averageCost: MoneyDto;
   readonly marketPrice: MoneyDto;

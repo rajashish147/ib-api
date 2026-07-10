@@ -160,7 +160,7 @@ app:
 
   # ── Strategy ─────────────────────────────────────────────────────────────────
   strategy:
-    evaluation-interval-seconds: 5    # Poll frequency for threshold evaluation
+    evaluation-interval-seconds: 30   # Poll frequency for threshold evaluation (each cycle ~15s, so 30s gives breathing room)
     default-strategy-name: primary
     default-mode: FULL_REBALANCE      # FULL_REBALANCE | FIXED_AMOUNT | HYBRID
 
@@ -218,6 +218,16 @@ app:
       enabled: true
       multiplier: 2
       local-symbol: ""
+    - symbol: GOOGL
+      exchange: SMART
+      currency: USD
+      asset-class: STOCK
+      enabled: true
+    - symbol: MSFT
+      exchange: SMART
+      currency: USD
+      asset-class: STOCK
+      enabled: true
 
   # ── Risk Management ──────────────────────────────────────────────────────────
   risk:

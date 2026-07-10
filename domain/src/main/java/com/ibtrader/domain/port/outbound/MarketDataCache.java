@@ -77,4 +77,20 @@ public interface MarketDataCache {
      * <p>Intended for use during system shutdown or integration testing teardown.</p>
      */
     void clear();
+
+    /**
+     * Returns a snapshot of all currently cached prices keyed by asset UUID.
+     *
+     * <p>The returned map is a copy and is safe to iterate without holding any lock.</p>
+     *
+     * @return immutable map of {@code assetId → latestPrice}
+     */
+    java.util.Map<UUID, BigDecimal> getAllPrices();
+
+    /**
+     * Returns a snapshot of all cached price timestamps keyed by asset UUID.
+     *
+     * @return immutable map of {@code assetId → observedAt}
+     */
+    java.util.Map<UUID, Instant> getAllTimestamps();
 }

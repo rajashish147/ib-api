@@ -5,6 +5,8 @@ import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -125,6 +127,36 @@ public class GlobalExceptionHandler {
                 HttpStatus.NOT_FOUND,
                 "NOT_FOUND",
                 ex.getMessage() != null ? ex.getMessage() : "The requested resource was not found.",
+                request
+        );
+    }
+
+    /**
+     * Handles malformed or unreadable JSON request bodies.
+     */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<Map<String, Object>> handleMalformedJson(
+            HttpMessageNotReadableException ex, WebRequest request) {
+        log.warn("Malformed request body at {}: {}", request.getDescription(false), ex.getMessage());
+        return buildErrorResponse(
+                HttpStatus.BAD_REQUEST,
+                "MALFORMED_REQUEST",
+                "Request body is missing or contains invalid JSON.",
+                request
+        );
+    }
+
+    /**
+     * Handles HTTP method not supported (405) errors.
+     */
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<Map<String, Object>> handleMethodNotSupported(
+            HttpRequestMethodNotSupportedException ex, WebRequest request) {
+        log.warn("Method not allowed at {}: {}", request.getDescription(false), ex.getMessage());
+        return buildErrorResponse(
+                HttpStatus.METHOD_NOT_ALLOWED,
+                "METHOD_NOT_ALLOWED",
+                "HTTP method '" + ex.getMethod() + "' is not supported for this endpoint.",
                 request
         );
     }

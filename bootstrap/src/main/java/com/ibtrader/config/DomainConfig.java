@@ -1,15 +1,23 @@
 package com.ibtrader.config;
 
+import com.ibtrader.domain.engine.CooldownValidator;
 import com.ibtrader.domain.engine.DefaultVariableRegistry;
 import com.ibtrader.domain.engine.VariableRegistry;
+import com.ibtrader.domain.model.strategy.EvaluationHistory;
+import com.ibtrader.domain.port.inbound.provider.DecisionProvider;
+import com.ibtrader.domain.port.inbound.provider.DecisionProviderRegistry;
+import com.ibtrader.domain.port.outbound.AssetRepository;
+import com.ibtrader.domain.port.outbound.EvaluationHistoryRepository;
+import com.ibtrader.domain.port.outbound.ExecutionPolicyRepository;
+import com.ibtrader.domain.port.outbound.MarketDataCache;
 import com.ibtrader.strategy.engine.DecisionEngine;
 import com.ibtrader.strategy.engine.OrderPlanningEngine;
 import com.ibtrader.strategy.engine.PortfolioAnalysisEngine;
 import com.ibtrader.strategy.engine.RuleEvaluationEngine;
-import com.ibtrader.domain.port.outbound.AssetRepository;
-import com.ibtrader.domain.port.outbound.MarketDataCache;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+
+import java.util.List;
 
 /**
  * Spring configuration class to instantiate domain layer services.
@@ -41,16 +49,27 @@ public class DomainConfig {
 
     @Bean
     public OrderPlanningEngine orderPlanningEngine(
-            MarketDataCache marketDataCache, 
-            AssetRepository assetRepository, 
-            com.ibtrader.domain.port.outbound.ExecutionPolicyRepository executionPolicyRepository) {
+            MarketDataCache marketDataCache,
+            AssetRepository assetRepository,
+            ExecutionPolicyRepository executionPolicyRepository) {
         return new OrderPlanningEngine(marketDataCache, assetRepository, executionPolicyRepository);
     }
-    
+
     @Bean
-    public com.ibtrader.domain.engine.CooldownValidator cooldownValidator(
-            com.ibtrader.domain.port.outbound.EvaluationHistoryRepository<
-                    com.ibtrader.domain.model.strategy.EvaluationHistory> evaluationHistoryRepository) {
-        return new com.ibtrader.domain.engine.CooldownValidator(evaluationHistoryRepository);
+    public CooldownValidator cooldownValidator(
+            EvaluationHistoryRepository<EvaluationHistory> evaluationHistoryRepository) {
+        return new CooldownValidator(evaluationHistoryRepository);
+    }
+
+    /**
+     * Collects all DecisionProvider @Component beans (RuleProvider,
+     * MachineLearningDecisionProvider, PortfolioGoalDecisionProvider,
+     * TechnicalIndicatorDecisionProvider) into a single registry.
+     * Spring automatically injects all beans implementing DecisionProvider
+     * as the List parameter.
+     */
+    @Bean
+    public DecisionProviderRegistry decisionProviderRegistry(List<DecisionProvider> providers) {
+        return new DecisionProviderRegistry(providers);
     }
 }

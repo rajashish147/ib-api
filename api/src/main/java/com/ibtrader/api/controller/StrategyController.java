@@ -57,11 +57,7 @@ public class StrategyController {
      */
     @GetMapping("/{id}")
     public ResponseEntity<StrategyResponseDto> getStrategyById(@PathVariable UUID id) {
-        try {
-            return ResponseEntity.ok(StrategyResponseDto.from(manageStrategyUseCase.getStrategyById(id)));
-        } catch (Exception e) {
-            return ResponseEntity.notFound().build();
-        }
+        return ResponseEntity.ok(StrategyResponseDto.from(manageStrategyUseCase.getStrategyById(id)));
     }
 
     /**
@@ -84,15 +80,11 @@ public class StrategyController {
             @PathVariable UUID id,
             @Valid @RequestBody StrategyRequestDto request) {
 
-        try {
-            TradingStrategy existing = manageStrategyUseCase.getStrategyById(id);
-            TradingStrategy toUpdate = strategyApiMapper.toDomain(request, existing);
-            TradingStrategy updated = manageStrategyUseCase.updateStrategy(id, toUpdate);
-            log.info("Updated strategy: {}", id);
-            return ResponseEntity.ok(StrategyResponseDto.from(updated));
-        } catch (Exception e) {
-            return ResponseEntity.notFound().build();
-        }
+        TradingStrategy existing = manageStrategyUseCase.getStrategyById(id);
+        TradingStrategy toUpdate = strategyApiMapper.toDomain(request, existing);
+        TradingStrategy updated = manageStrategyUseCase.updateStrategy(id, toUpdate);
+        log.info("Updated strategy: {}", id);
+        return ResponseEntity.ok(StrategyResponseDto.from(updated));
     }
 
     /**
@@ -100,13 +92,9 @@ public class StrategyController {
      */
     @PutMapping("/{id}/enable")
     public ResponseEntity<StrategyResponseDto> enableStrategy(@PathVariable UUID id) {
-        try {
-            TradingStrategy enabled = manageStrategyUseCase.toggleStrategy(id, true);
-            log.info("Enabling strategy: {}", id);
-            return ResponseEntity.ok(StrategyResponseDto.from(enabled));
-        } catch (Exception e) {
-            return ResponseEntity.notFound().build();
-        }
+        TradingStrategy enabled = manageStrategyUseCase.toggleStrategy(id, true);
+        log.info("Enabling strategy: {}", id);
+        return ResponseEntity.ok(StrategyResponseDto.from(enabled));
     }
 
     /**
@@ -114,13 +102,9 @@ public class StrategyController {
      */
     @PutMapping("/{id}/disable")
     public ResponseEntity<StrategyResponseDto> disableStrategy(@PathVariable UUID id) {
-        try {
-            TradingStrategy disabled = manageStrategyUseCase.toggleStrategy(id, false);
-            log.info("Disabling strategy: {}", id);
-            return ResponseEntity.ok(StrategyResponseDto.from(disabled));
-        } catch (Exception e) {
-            return ResponseEntity.notFound().build();
-        }
+        TradingStrategy disabled = manageStrategyUseCase.toggleStrategy(id, false);
+        log.info("Disabling strategy: {}", id);
+        return ResponseEntity.ok(StrategyResponseDto.from(disabled));
     }
 
     /**
@@ -128,13 +112,9 @@ public class StrategyController {
      */
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteStrategy(@PathVariable UUID id) {
-        try {
-            manageStrategyUseCase.deleteStrategy(id);
-            log.info("Deleted strategy: {}", id);
-            return ResponseEntity.noContent().build();
-        } catch (Exception e) {
-            return ResponseEntity.notFound().build();
-        }
+        manageStrategyUseCase.deleteStrategy(id);
+        log.info("Deleted strategy: {}", id);
+        return ResponseEntity.noContent().build();
     }
 
     private static List<StrategyResponseDto> toResponseList(List<TradingStrategy> strategies) {

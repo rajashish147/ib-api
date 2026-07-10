@@ -17,7 +17,20 @@ Chart.register(...registerables);
           <div class="subtitle">{{ subtitle }}</div>
         </div>
       </div>
-      <canvas #canvas></canvas>
+      <div class="canvas-wrap">
+        <canvas #canvas></canvas>
+        @if (error) {
+          <div class="overlay">
+            <mat-icon class="overlay-icon error-icon">error_outline</mat-icon>
+            <div class="overlay-text">Could not load chart data</div>
+          </div>
+        } @else if (isEmpty()) {
+          <div class="overlay">
+            <mat-icon class="overlay-icon">bar_chart</mat-icon>
+            <div class="overlay-text">No data available yet</div>
+          </div>
+        }
+      </div>
     </mat-card>
   `,
   styles: [`
@@ -25,7 +38,16 @@ Chart.register(...registerables);
     .header { display: flex; justify-content: space-between; align-items: start; }
     .title { font-weight: 700; font-size: 1rem; }
     .subtitle { color: var(--app-text-muted); font-size: 0.85rem; margin-top: 0.25rem; }
-    canvas { width: 100% !important; height: 240px !important; }
+    .canvas-wrap { position: relative; flex: 1; min-height: 240px; }
+    canvas { width: 100% !important; height: 100% !important; }
+    .overlay {
+      position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 0.5rem; background: color-mix(in srgb, var(--app-surface-elevated) 80%, transparent);
+      border-radius: var(--radius-md); backdrop-filter: blur(4px);
+    }
+    .overlay-icon { font-size: 2.5rem; width: 2.5rem; height: 2.5rem; color: var(--app-text-muted); }
+    .error-icon { color: var(--app-negative) !important; }
+    .overlay-text { color: var(--app-text-muted); font-size: 0.9rem; }
   `],
   changeDetection: ChangeDetectionStrategy.OnPush
 })
@@ -34,6 +56,7 @@ export class ChartCardComponent implements AfterViewInit, OnChanges, OnDestroy {
   @Input() subtitle = '';
   @Input({ required: true }) chartData!: ChartData<'line' | 'doughnut' | 'bar'>;
   @Input() chartType: 'line' | 'doughnut' | 'bar' = 'line';
+  @Input() error = false;
 
   @ViewChild('canvas', { static: true }) canvas?: ElementRef<HTMLCanvasElement>;
 
@@ -44,13 +67,18 @@ export class ChartCardComponent implements AfterViewInit, OnChanges, OnDestroy {
   }
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (changes['chartData'] || changes['chartType']) {
+    if (changes['chartData'] || changes['chartType'] || changes['error']) {
       this.renderChart();
     }
   }
 
   ngOnDestroy(): void {
     this.chart?.destroy();
+  }
+
+  isEmpty(): boolean {
+    if (!this.chartData?.datasets?.length) return true;
+    return this.chartData.datasets.every((ds) => !ds.data?.length);
   }
 
   private renderChart(): void {
@@ -82,4 +110,4 @@ export class ChartCardComponent implements AfterViewInit, OnChanges, OnDestroy {
 
     this.chart = new Chart(this.canvas.nativeElement, config);
   }
-}
+}

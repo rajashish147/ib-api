@@ -77,6 +77,11 @@ public class IbApiClient {
         invoke(socket, "reqCurrentTime", new Class<?>[0]);
     }
 
+    public void requestPositions() {
+        requireSocket();
+        invoke(socket, "reqPositions", new Class<?>[0]);
+    }
+
     public void placeStockOrder(
             int orderId,
             String symbol,

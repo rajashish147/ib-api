@@ -14,7 +14,7 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class TradingEngineController {
 
-    @Value("${ib.accounts.default.paper}")
+    @Value("${app.ib.accounts.default.paper:DUP854695}")
     private String defaultAccountId;
 
     private final TradingEngineOrchestrator tradingEngineOrchestrator;
@@ -22,35 +22,24 @@ public class TradingEngineController {
 
     @PostMapping("/trigger")
     public ResponseEntity<Map<String, String>> triggerPipeline() {
-        // In a real application, accountId might come from a user session or JWT token
         String accountId = defaultAccountId;
-        
-        // Execute asynchronously or synchronously depending on the Orchestrator
-        // For now, we trigger it synchronously (or it spawns a thread)
-        try {
-            tradingEngineOrchestrator.executePipeline(accountId);
-            return ResponseEntity.ok(Map.of(
-                "status", "success",
-                "message", "Trading Pipeline triggered for account " + accountId
-            ));
-        } catch (Exception e) {
-            return ResponseEntity.internalServerError().body(Map.of(
-                "status", "error",
-                "message", e.getMessage()
-            ));
-        }
+        tradingEngineOrchestrator.executePipeline(accountId);
+        return ResponseEntity.ok(Map.of(
+            "status", "success",
+            "message", "Trading pipeline triggered for account " + accountId
+        ));
     }
 
     @PostMapping("/pause")
     public ResponseEntity<Map<String, String>> pauseEngine() {
         engineState.pause();
-        return ResponseEntity.ok(Map.of("status", "paused"));
+        return ResponseEntity.ok(Map.of("status", "paused", "message", "Engine paused successfully"));
     }
 
     @PostMapping("/resume")
     public ResponseEntity<Map<String, String>> resumeEngine() {
         engineState.resume();
-        return ResponseEntity.ok(Map.of("status", "running"));
+        return ResponseEntity.ok(Map.of("status", "running", "message", "Engine resumed successfully"));
     }
 
     @GetMapping("/status")

@@ -112,4 +112,18 @@ public class MarketDataCacheAdapter implements MarketDataCache {
     public void clear() {
         cache.clear();
     }
+
+    @Override
+    public java.util.Map<UUID, BigDecimal> getAllPrices() {
+        java.util.Map<UUID, BigDecimal> snapshot = new java.util.HashMap<>(cache.size());
+        cache.forEach((k, v) -> snapshot.put(k, v.price()));
+        return java.util.Collections.unmodifiableMap(snapshot);
+    }
+
+    @Override
+    public java.util.Map<UUID, Instant> getAllTimestamps() {
+        java.util.Map<UUID, Instant> snapshot = new java.util.HashMap<>(cache.size());
+        cache.forEach((k, v) -> snapshot.put(k, v.timestamp()));
+        return java.util.Collections.unmodifiableMap(snapshot);
+    }
 }
