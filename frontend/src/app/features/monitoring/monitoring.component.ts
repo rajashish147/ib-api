@@ -119,8 +119,8 @@ interface MonitorTile {
     .info-title { display: flex; align-items: center; gap: 0.5rem; font-weight: 700; font-size: 0.9rem; }
     .info-title mat-icon { font-size: 1.1rem; width: 1.1rem; height: 1.1rem; color: var(--app-primary); }
     .info-body { display: grid; gap: 0.5rem; }
-    .info-row { display: flex; justify-content: space-between; align-items: baseline; gap: 0.5rem; font-size: 0.88rem; }
-    .info-row strong { text-align: right; }
+    .info-row { display: flex; justify-content: space-between; align-items: baseline; gap: 0.5rem; font-size: 0.88rem; flex-wrap: wrap; }
+    .info-row strong, .info-row a { text-align: right; word-break: break-word; max-width: 60%; }
     .shimmer {
       background: linear-gradient(90deg, var(--app-surface-2) 25%, color-mix(in srgb, var(--app-primary) 8%, var(--app-surface-2)) 50%, var(--app-surface-2) 75%);
       background-size: 200% 100%;

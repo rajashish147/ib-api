@@ -14,7 +14,7 @@ import { EmptyStateComponent } from '../../shared/components/empty-state.compone
   imports: [CommonModule, ReactiveFormsModule, ...MATERIAL_IMPORTS, EmptyStateComponent],
   template: `
     <section class="page grid">
-    <mat-card class="surface card header-card">
+      <mat-card class="surface card header-card">
         <div class="header-info">
           <div class="page-title">Portfolio</div>
           <div class="page-subtitle">Live positions, account summary, and historical snapshots.</div>

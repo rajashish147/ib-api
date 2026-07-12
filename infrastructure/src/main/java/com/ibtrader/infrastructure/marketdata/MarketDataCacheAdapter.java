@@ -42,22 +42,20 @@ public class MarketDataCacheAdapter implements MarketDataCache {
             while (running) {
                 try {
                     PriceUpdate update = updateQueue.take();
-                    
-                    // 1. Update in-memory cache
-                    cache.put(update.assetId(), new PriceEntry(update.price(), update.timestamp()));
-                    
-                    // 2. Throttled DB write
+
+                    // In-memory cache is already updated synchronously in putPrice().
+                    // This thread only handles throttled DB persistence.
                     Instant lastWrite = lastDbWrite.getOrDefault(update.assetId(), Instant.EPOCH);
                     if (update.timestamp().minus(DB_WRITE_INTERVAL).isAfter(lastWrite)) {
                         persistToDatabase(update);
                         lastDbWrite.put(update.assetId(), update.timestamp());
                     }
-                    
+
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                     break;
                 } catch (Exception e) {
-                    log.error("Error processing market data update", e);
+                    log.error("Error processing market data DB persistence", e);
                 }
             }
         });
@@ -77,10 +75,14 @@ public class MarketDataCacheAdapter implements MarketDataCache {
 
     @Override
     public void putPrice(UUID assetId, BigDecimal price, Instant timestamp) {
-        // Instead of writing directly to cache, offer to the queue
+        // Write to in-memory cache immediately so the strategy engine always reads the
+        // latest tick synchronously during its evaluation cycle.
+        cache.put(assetId, new PriceEntry(price, timestamp));
+
+        // Enqueue for throttled DB persistence only — non-blocking best-effort.
         boolean accepted = updateQueue.offer(new PriceUpdate(assetId, price, timestamp));
         if (!accepted) {
-            log.warn("Market data queue is full! Dropping tick for asset {}", assetId);
+            log.warn("Market data DB-persistence queue is full! DB write skipped for asset {}", assetId);
         }
     }
 

@@ -62,14 +62,14 @@ import type { StatCardState } from '../../shared/components/stat-card.component'
   styles: [`
     .dashboard { gap: 1rem; }
     .stats-grid, .charts-grid { display: grid; gap: 1rem; }
-    .stats-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .stats-grid { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
     .charts-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .timeline-card { padding: 1rem; }
     .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; }
     .section-title { font-size: 1rem; font-weight: 700; }
     .section-subtitle { color: var(--app-text-muted); font-size: 0.88rem; }
-    @media (max-width: 1200px) { .charts-grid, .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-    @media (max-width: 720px) { .charts-grid, .stats-grid { grid-template-columns: 1fr; } }
+    @media (max-width: 1400px) { .charts-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    @media (max-width: 900px) { .charts-grid { grid-template-columns: 1fr; } }
   `],
   changeDetection: ChangeDetectionStrategy.OnPush
 })

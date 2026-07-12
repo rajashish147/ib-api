@@ -103,7 +103,8 @@ import { EmptyStateComponent } from '../../shared/components/empty-state.compone
     .detail-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.75rem; }
     .detail-grid div { display: grid; gap: 0.25rem; padding: 0.75rem; border: 1px solid var(--app-border); border-radius: 14px; }
     .detail-grid span { color: var(--app-text-muted); font-size: 0.82rem; }
-    @media (max-width: 720px) { .section-card, .status-card { flex-direction: column; align-items: start; } .approval-row { flex-direction: column; } .detail-grid { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 1100px) { .detail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    @media (max-width: 720px) { .section-card, .status-card { flex-direction: column; align-items: start; } .approval-row { flex-direction: column; } .detail-grid { grid-template-columns: 1fr; } }
   `],
   changeDetection: ChangeDetectionStrategy.OnPush
 })

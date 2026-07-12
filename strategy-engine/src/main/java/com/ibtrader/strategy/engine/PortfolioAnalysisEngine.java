@@ -12,7 +12,6 @@ import com.ibtrader.domain.port.inbound.PortfolioAnalysisPort;
 import com.ibtrader.domain.port.outbound.AssetRepository;
 import com.ibtrader.domain.port.outbound.MarketDataCache;
 import lombok.RequiredArgsConstructor;
-import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -26,7 +25,6 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-@Service
 @RequiredArgsConstructor
 public class PortfolioAnalysisEngine implements PortfolioAnalysisPort {
 

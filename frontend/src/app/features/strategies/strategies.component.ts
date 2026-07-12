@@ -225,7 +225,7 @@ export class StrategiesComponent {
       buyThreshold: strategy.buyThreshold === null ? null : Number(strategy.buyThreshold),
       sellThreshold: strategy.sellThreshold === null ? null : Number(strategy.sellThreshold),
       targetSymbol: strategy.targets[0]?.symbol ?? '',
-      targetAssetClass: strategy.targets[0]?.assetClass ?? 'EQUITY',
+      targetAssetClass: strategy.targets[0]?.assetClass ?? 'STOCK',
       targetQuantity: strategy.targets[0]?.quantity === undefined ? null : Number(strategy.targets[0]?.quantity),
       enabled: strategy.enabled
     });

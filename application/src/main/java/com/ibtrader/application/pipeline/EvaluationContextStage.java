@@ -1,6 +1,5 @@
 package com.ibtrader.application.pipeline;
 
-import com.ibtrader.domain.engine.CooldownValidator;
 import com.ibtrader.domain.engine.EvaluationContext;
 import com.ibtrader.domain.model.strategy.TradingStrategy;
 import com.ibtrader.domain.port.inbound.EvaluationContextFactory;
@@ -14,18 +13,21 @@ import org.springframework.stereotype.Component;
 public class EvaluationContextStage implements PipelineStage {
 
     private final EvaluationContextFactory evaluationContextFactory;
-    private final CooldownValidator cooldownValidator;
+
+    // NOTE: Cooldown filtering is already performed by ActiveStrategiesStage using
+    // StrategyExecutionHistoryPort. Doing it again here with a different repository
+    // (EvaluationHistoryRepository) caused strategies to be incorrectly skipped when
+    // the two history tables were out of sync.
 
     @Override
     public void execute(PipelineContext context) {
         for (TradingStrategy strategy : context.getActiveStrategies()) {
-            if (!cooldownValidator.canExecute(strategy)) {
-                log.info("Skipping strategy {} due to cooldown.", strategy.getId());
-                continue;
+            try {
+                EvaluationContext evalContext = evaluationContextFactory.create(strategy, context.getAccountId());
+                context.getEvaluationContexts().put(strategy, evalContext);
+            } catch (Exception e) {
+                log.warn("Failed to build EvaluationContext for strategy {}: {}", strategy.getId(), e.getMessage());
             }
-            
-            EvaluationContext evalContext = evaluationContextFactory.create(strategy, context.getAccountId());
-            context.getEvaluationContexts().put(strategy, evalContext);
         }
     }
 

@@ -1,4 +1,4 @@
-package com.ibtrader.domain.port.inbound.provider.impl;
+package com.ibtrader.strategy.engine.provider.impl;
 
 import com.ibtrader.domain.engine.EvaluationContext;
 import com.ibtrader.domain.model.strategy.TradeSignal;

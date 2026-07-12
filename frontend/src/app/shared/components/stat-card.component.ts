@@ -35,18 +35,18 @@ export type StatCardState = 'loading' | 'error' | 'ok';
     </mat-card>
   `,
   styles: [`
-    .stat-card { min-height: 140px; padding: 1rem 1.1rem; display: flex; flex-direction: column; gap: 0.65rem; transition: border-color 0.2s; }
-    .label-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; color: var(--app-text-muted); }
-    .label { font-size: 0.92rem; letter-spacing: 0.02em; }
+    .stat-card { min-height: 140px; padding: 1rem 1.1rem; display: flex; flex-direction: column; gap: 0.5rem; transition: border-color 0.2s; }
+    .label-row { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; color: var(--app-text-muted); }
+    .label { font-size: 0.92rem; letter-spacing: 0.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .value { font-size: clamp(1.65rem, 3vw, 2.35rem); font-weight: 700; line-height: 1.1; }
-    .meta { margin-top: auto; font-size: 0.88rem; }
-    .state-icon { font-size: 1.1rem; width: 1.1rem; height: 1.1rem; }
+    .meta { font-size: 0.88rem; margin-top: 0.25rem; }
+    .state-icon { font-size: 1.1rem; width: 1.1rem; height: 1.1rem; flex-shrink: 0; }
     .muted-icon { color: var(--app-text-muted); }
     .error-icon { color: var(--app-negative); }
     .error-state { border-color: color-mix(in srgb, var(--app-negative) 40%, transparent) !important; }
     .error-value { font-size: 1.4rem; color: var(--app-negative); }
     .skeleton-value { height: 2.4rem; border-radius: 8px; width: 70%; }
-    .skeleton-meta { height: 1rem; border-radius: 6px; width: 50%; margin-top: auto; }
+    .skeleton-meta { height: 1rem; border-radius: 6px; width: 50%; margin-top: 0.25rem; }
     .shimmer {
       background: linear-gradient(90deg, var(--app-surface-2) 25%, color-mix(in srgb, var(--app-primary) 8%, var(--app-surface-2)) 50%, var(--app-surface-2) 75%);
       background-size: 200% 100%;

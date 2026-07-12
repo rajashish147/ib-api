@@ -4,7 +4,7 @@ import com.ibtrader.domain.engine.EvaluationContext;
 import com.ibtrader.domain.model.strategy.TradeSignal;
 import com.ibtrader.domain.port.outbound.ExpressionTreeRepository;
 import com.ibtrader.domain.port.outbound.RuleRepository;
-import com.ibtrader.strategy.engine.RuleEvaluationEngine;
+import com.ibtrader.domain.port.inbound.RuleEvaluationPort;
 import lombok.RequiredArgsConstructor;
 import com.ibtrader.domain.port.inbound.provider.DecisionProvider;
 import org.springframework.stereotype.Component;
@@ -16,7 +16,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class RuleProvider implements DecisionProvider {
 
-    private final RuleEvaluationEngine ruleEvaluationEngine;
+    private final RuleEvaluationPort ruleEvaluationEngine;
     private final ExpressionTreeRepository expressionTreeRepository;
     private final RuleRepository ruleRepository;
 

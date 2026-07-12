@@ -76,14 +76,15 @@ interface NavItem {
     .nav { width: 272px; padding: 1.25rem 0.75rem; border: 0; border-right: 1px solid var(--app-border); border-radius: 0; overflow-y: auto; }
     .brand { display: flex; align-items: center; gap: 0.9rem; padding: 0.5rem 0.75rem 1.25rem; }
     .brand-mark { width: 44px; height: 44px; border-radius: 14px; background: linear-gradient(135deg, var(--app-primary), var(--app-accent)); display: grid; place-items: center; font-weight: 800; font-size: 1.2rem; color: white; flex-shrink: 0; }
-    .brand-title { font-weight: 800; }
-    .brand-subtitle { color: var(--app-text-muted); font-size: 0.82rem; }
+    .brand > div:last-child { min-width: 0; overflow: hidden; }
+    .brand-title { font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .brand-subtitle { color: var(--app-text-muted); font-size: 0.82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .nav-group-label { padding: 1rem 1rem 0.35rem; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--app-text-muted); }
-    .content { display: flex; flex-direction: column; min-height: 100vh; padding: 1rem; gap: 1rem; }
-    .toolbar { position: sticky; top: 1rem; z-index: 3; display: flex; gap: 1rem; align-items: center; border-radius: var(--radius-lg); padding-inline: 1rem; overflow: hidden; }
+    .content { display: flex; flex-direction: column; min-height: 100vh; padding: 1rem; gap: 0; }
+    .toolbar { position: sticky; top: 0; z-index: 3; display: flex; gap: 1rem; align-items: center; border-radius: var(--radius-lg); padding-inline: 1rem; overflow: hidden; margin-bottom: 1rem; }
     .toolbar-left { display: flex; align-items: center; gap: 1rem; min-width: 0; }
     .toolbar-progress { position: absolute; bottom: 0; left: 0; right: 0; height: 2px; }
-    .page-title { font-size: 1.1rem; font-weight: 700; }
+    .page-title { font-size: 1.1rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .spacer { flex: 1; }
     .theme-btn { flex-shrink: 0; }
     .main-panel { flex: 1; min-height: 0; }
