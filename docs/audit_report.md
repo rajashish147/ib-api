@@ -1,61 +1,52 @@
 # IB-API Codebase Audit Report
 
-**Date:** July 2, 2026  
-**Auditor:** Senior Technical Auditor (AI)  
-**Scope:** Deep structural and functional analysis of the `ib-api` trading application.
+**Date:** July 13, 2026
+**Scope:** Deep structural, security, and functional audit of the `ib-api` trading application (backend + Angular frontend), performed on the `audit/deep-cleanup` branch in an isolated git worktree.
+
+> This supersedes the previous audit report from July 2, 2026. Most items from that report (missing use-case implementations, missing adapters, empty `risk`/`strategy-engine` modules) had already been resolved by subsequent work and are no longer accurate; this report reflects the current state of the codebase.
 
 ---
 
 ## 1. Executive Summary
-The `ib-api` project is a Spring Boot application intended to follow Hexagonal Architecture (Ports and Adapters) across a multi-module Gradle setup. The domain models, database migrations, and Interactive Brokers (IBKR) reflection-based integration are impressively detailed and functional. 
 
-However, the architecture has suffered from significant structural drift. Many defined inbound/outbound ports are unimplemented, controllers are bypassing the application layer to talk directly to repositories, and several Gradle modules are completely empty.
+The architecture is now sound: every inbound port in `domain.port.inbound` has a real implementation in `application`, `strategy-engine`, or `risk`, and the REST controllers go through the application layer rather than talking to repositories directly. This pass focused on finding concrete correctness bugs, dead code, security issues, and UI/UX polish rather than architectural gaps.
 
----
+## 2. Critical Issues Found & Fixed
 
-## 2. What Is Implemented (The Good)
+* **Hardcoded production database credentials** — a root-level `RepairFlyway.java` scratch script contained a plaintext Aiven Postgres username/password. It was never committed to git (already `.gitignore`d), but existed in plaintext on disk. **Deleted.** ⚠️ **The exposed password should be rotated as a precaution**, since it's impossible to know for certain it wasn't synced/backed up elsewhere.
+* **Duplicate outbox processors racing on the same table** — `OutboxWorker` + `IbCommandOutboxPublisher` and `OrderExecutionEngine` were both independently polling and submitting the same pending IB commands, with no locking between them. This risked **duplicate real order submissions** to Interactive Brokers. Consolidated into a single processor (`OrderExecutionEngine`).
+* **Duplicate pipeline schedulers** — `TradingEngineScheduler` (application module) and `TradingPipelineScheduler` (scheduler module) both independently triggered the same strategy-evaluation pipeline on a timer, and only one of them respected the pause/resume (`EngineState`) API. This could cause overlapping strategy evaluations and made "pause trading" unreliable. Consolidated into `TradingPipelineScheduler`.
+* **NullPointerException on any OR-logic rule** — `RuleEvaluationEngine` checked `node.getOperator()` for the `OR` branch instead of `node.getNodeType()` (the `AND` branch was correct). Since `operator` is only populated on `CONDITION` nodes, any strategy using an `OR` node in its rule tree would throw at evaluation time. Fixed.
+* **Silent data corruption on unregistered symbols** — the outbox order-processing path generated a random UUID as the order's `assetId` when a symbol wasn't found in the asset registry, instead of failing the attempt. Fixed to fail (and retry/dead-letter) instead of writing bad data.
 
-*   **Robust Domain Modeling:** An extensive set of DDD aggregates and entities exist in the `domain` module, including `Asset`, `Portfolio`, `TradingStrategy`, `Order`, `ExpressionNode`, and various value objects.
-*   **Database & Migrations:** 22 JPA entities in the `infrastructure` layer, meticulously mapped to the database via Flyway migrations (V1 through V19). The database layer successfully spins up and validates.
-*   **Trading Engines:** Complex domain logic is implemented in `com.ibtrader.domain.engine` including:
-    *   `DecisionEngine`
-    *   `OrderPlanningEngine`
-    *   `PortfolioAnalysisEngine`
-    *   `RuleEvaluationEngine`
-*   **IBKR Integration via Reflection:** The `infrastructure/broker/ibkr` package successfully implements an IB API wrapper using Java Reflection. This elegantly bypasses the need for the proprietary, license-gated `TwsApi.jar` at compile time, while still supporting dynamic market data subscriptions (`reqMktData`) and order execution.
-*   **Automated Seeding:** `TestStrategySeeder` correctly bootstraps the database with `SNDK`, `META`, and `NVDA` assets and a test strategy on startup.
+## 3. Dead Code Removed
 
----
+* `Watchlist` / `WatchlistSymbol` domain models, `WatchlistRepository` port, `WatchlistRepositoryAdapter`, `WatchlistEntity`/`WatchlistSymbolEntity`, and their JPA repositories/mapper — fully disconnected from any business logic or controller (confirmed via repo-wide search for consumers). This matches the "Unused Feature" finding from the previous audit, which had never been acted on.
+* `IndicatorMetadataEntity` + its JPA repository — same situation, never wired into `IndicatorProvider`.
+* `MarketDataAdapter` / `MarketDataPort` — a stub implementation with `// TODO: Call IbApiClient` comments that was never actually injected anywhere. The real market-data subscription flow lives directly in `IbConnectionManager`, which calls `IbApiClient.requestMarketData(...)` itself. The port/adapter pair was misleading dead code.
+* `CooldownValidator` + its `@Bean` — superseded by `ActiveStrategiesStage`, as already noted in a comment elsewhere in the codebase.
+* A passthrough no-op `RiskValidationPort` `@Bean` in `DomainConfig` that competed with the real `RiskEngine` `@Service` for the same port type.
+* `RepairDbTest.java` — an ad-hoc DB-repair script disguised as a JUnit test (gated by `Assumptions` so it never ran), same category as the deleted `RepairFlyway.java`.
+* Frontend: a leftover Vite/vanilla-JS prototype (`frontend/index.html`, `frontend/vite.config.js`, `frontend/src/main.js`, `frontend/src/style.css`) fully superseded by the real Angular CLI app but still tracked in git. Removed. Stray `ng-serve.*.log` files removed and gitignored.
+* Various unused imports (`CommonModule`, `FormsModule`, `ReactiveFormsModule`) across ~15 Angular components.
 
-## 3. What Is Missing (The Bad)
+## 4. Other Correctness Fixes
 
-*   **Missing Application Layer Implementations:** 
-    *   There are 11 UseCase interfaces defined in `domain.port.inbound` (e.g., `SubmitOrderUseCase`, `EvaluateStrategyUseCase`), but **none of them are implemented** in the `application` layer. 
-    *   The only class in the `application` module is `TradingEngineOrchestrator.java`.
-*   **Missing Adapter Implementations:** 
-    *   There are 24 Outbound Port interfaces in `domain.port.outbound`, but only **6 adapters** are implemented in `infrastructure.persistence.adapter`.
-*   **Architectural Violations:** Because the Application layer UseCases are missing, the REST Controllers (e.g., `PortfolioController`, `StrategyController`) bypass the Application and Domain layers entirely, injecting Outbound Repositories directly to fetch data.
-*   **Testing:** There are virtually zero unit or integration tests. The JaCoCo test coverage verification task fails by default because coverage is 0%.
-*   **Frontend / UI:** While CORS is configured for `localhost:5173`, no frontend assets exist in this repository.
+* N+1 queries: `PortfolioAnalysisEngine.accumulateExposures` (per-position asset lookups → batched) and `StrategyRepositoryAdapter` (per-strategy version/basket-target lookups → batched via new `findByStrategyIdIn` repository methods).
+* `PortfolioRepositoryAdapter.save()` saved positions one-by-one with no transaction boundary; added `@Transactional` + `saveAll`.
+* Per-strategy error isolation added to `DecisionProviderStage`, `DecisionStage`, `OrderPlanningStage`, `RiskValidationStage`, and `OutboxStage`, matching the pattern already used in `EvaluationContextStage`, so one bad strategy no longer aborts the whole pipeline cycle.
+* Frontend: two `computed()` signals (`AppShellComponent.pageTitle`, `BreadcrumbsComponent.items`) read `Router.url` directly, which isn't reactive — they froze after the first navigation. Rebuilt on `NavigationEnd` events.
+* Frontend: several HTTP subscriptions were missing `takeUntilDestroyed` (dashboard, market-data, monitoring), risking post-destroy signal writes.
+* Frontend: CSV export on the Portfolio page only exported the current page instead of all filtered rows, and emitted a hardcoded `'N/A'` instead of the real asset class.
 
----
+## 5. Remaining Known Limitations (Not Fixed — By Design or Out of Scope)
 
-## 4. Dead Code & Unnecessary Components (The Ugly)
+* `RiskEngine` (in the `risk` module) is currently a passthrough — it does not yet enforce per-signal risk limits. Pre-trade risk checks (max drawdown, concentration, leverage) are enforced separately in `RiskService`. Implementing full per-signal risk filtering is a real feature, not a bug fix.
+* `OrderService.execute(...)` performs a live IBKR network call inside a `@Transactional` boundary — a long-lived-transaction smell. Fixing it properly means routing it through the outbox pattern already used elsewhere; deferred as a larger, riskier change.
+* Mixed logging frameworks (`java.util.logging.Logger` in some engine classes vs. `@Slf4j` elsewhere) — left alone outside files already touched, to avoid a large, unrelated sweep.
+* Angular `analytics`, `administration`, and `settings` pages render static informational content with no live backend wiring — this is a feature gap, not a defect, and out of scope for a cleanup pass.
+* `ML` and technical-indicator decision providers remain intentional stubs (documented in the README) — left as-is.
 
-*   **Empty Gradle Modules:** The `risk` and `strategy-engine` modules exist in the `settings.gradle` and have their own `build.gradle.kts` files, but they contain **absolutely zero Java source code**. The engine logic that belongs in them was mistakenly placed inside the `domain` module (`com.ibtrader.domain.engine`).
-*   **Unused Feature - Watchlists:** 
-    *   `WatchlistEntity`, `WatchlistSymbolEntity`, and their respective `JpaRepository` interfaces exist in the infrastructure layer.
-    *   `WatchlistRepository<T>` exists in the domain layer.
-    *   However, these are completely disconnected from any business logic, engines, or controllers. They are dead code.
-*   **Unused Feature - Indicator Metadata:** 
-    *   `IndicatorMetadataEntity` and its repository exist, but they are not wired into the `IndicatorProvider` logic in the domain.
-*   **Orphaned Inbound Ports:** All 11 files in `domain/src/main/java/com/ibtrader/domain/port/inbound` are dead code since nothing implements them.
+## 6. Process Note
 
----
-
-## 5. Senior Auditor Recommendations
-
-1.  **Delete Empty Modules:** Remove `risk` and `strategy-engine` from `settings.gradle` and delete the folders, OR refactor the `domain.engine` package contents into these modules to justify their existence.
-2.  **Fix Architectural Violations:** Implement the 11 Inbound UseCases as Application Services (e.g., `PortfolioService`), and refactor the REST controllers to use these services rather than calling Repositories directly.
-3.  **Complete the Adapters:** Provide adapter implementations for the remaining 18 outbound ports, or delete the ports if they are no longer necessary.
-4.  **Prune Dead Features:** Delete `Watchlist` and `IndicatorMetadata` entities and repositories to reduce codebase bloat, unless they are slated for immediate implementation.
+This audit was performed entirely inside a dedicated git worktree (`.worktrees/audit-deep-cleanup`, branch `audit/deep-cleanup`) to avoid disturbing uncommitted work on `main`. See the branch for the full commit history of this pass.
