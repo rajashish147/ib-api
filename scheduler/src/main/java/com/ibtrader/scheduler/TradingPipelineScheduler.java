@@ -1,29 +1,33 @@
 package com.ibtrader.scheduler;
 
+import com.ibtrader.application.EngineState;
 import com.ibtrader.application.TradingEngineOrchestrator;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import java.util.logging.Logger;
 
 /**
  * Trigger for the Trading Engine Orchestrator.
  * Keeps scheduling concerns completely separate from business logic.
+ *
+ * <p>This is the single scheduled entry point into {@link TradingEngineOrchestrator}.
+ * A previous duplicate scheduler ({@code com.ibtrader.application.TradingEngineScheduler})
+ * was removed because running two independent schedulers against the same pipeline caused
+ * overlapping executions (risking duplicate order submissions) and made the pause/resume
+ * API unreliable, since only one of the two schedulers consulted {@link EngineState}.</p>
  */
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class TradingPipelineScheduler {
 
-    private static final Logger LOG = Logger.getLogger(TradingPipelineScheduler.class.getName());
-
     private final TradingEngineOrchestrator orchestrator;
+    private final EngineState engineState;
 
-    @Value("${app.ib.account-id:DU123456}")
+    @Value("${app.ib.account-id:DUP854695}")
     private String defaultAccountId;
-
-    @Value("${app.strategy.evaluation-interval-seconds:60}")
-    private int evaluationIntervalSeconds;
 
     /**
      * Fixed interval execution based on configuration.
@@ -31,12 +35,17 @@ public class TradingPipelineScheduler {
      */
     @Scheduled(initialDelay = 10000, fixedDelayString = "${app.strategy.evaluation-interval-seconds:60}000")
     public void executeFixedInterval() {
-        LOG.info("Trading pipeline triggered.");
+        if (!engineState.isRunning()) {
+            log.trace("Trading Engine is paused. Skipping scheduled execution.");
+            return;
+        }
+
+        log.info("Trading pipeline triggered.");
         try {
             orchestrator.executePipeline(defaultAccountId);
-            LOG.info("Trading pipeline cycle completed.");
+            log.info("Trading pipeline cycle completed.");
         } catch (Exception e) {
-            LOG.severe(String.format("Market-open pipeline execution failed: %s", e.getMessage()));
+            log.error("Trading pipeline execution failed: {}", e.getMessage(), e);
         }
     }
 
@@ -45,11 +54,16 @@ public class TradingPipelineScheduler {
      */
     @Scheduled(cron = "0 30 9 * * MON-FRI", zone = "America/New_York")
     public void executeAtMarketOpen() {
-        LOG.info("Triggering market-open pipeline execution...");
+        if (!engineState.isRunning()) {
+            log.trace("Trading Engine is paused. Skipping market-open execution.");
+            return;
+        }
+
+        log.info("Triggering market-open pipeline execution...");
         try {
             orchestrator.executePipeline(defaultAccountId);
         } catch (Exception e) {
-            LOG.severe("Error in market-open pipeline cycle: " + e.getMessage());
+            log.error("Error in market-open pipeline cycle: {}", e.getMessage(), e);
         }
     }
 }

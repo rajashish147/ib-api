@@ -1,6 +1,5 @@
 package com.ibtrader.infrastructure.broker.ibkr;
 
-import com.ibtrader.domain.port.outbound.IbCommandOutboxPort;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -23,7 +22,6 @@ import java.util.List;
 @Slf4j
 public class OrderExecutionEngine {
 
-    private final IbCommandOutboxPort ibCommandOutboxPort;
     private final IbConnectionManager ibConnectionManager;
     private final com.ibtrader.infrastructure.persistence.repository.IbCommandOutboxJpaRepository jpaRepository;
     
@@ -44,9 +42,16 @@ public class OrderExecutionEngine {
             return;
         }
 
+        // Includes FAILED (retryable) alongside PENDING so that commands aborted by
+        // BrokerConnectionEventListener on disconnect (which marks them FAILED) are retried
+        // once nextRetryAt elapses. Dead-lettered commands are marked SKIPPED, which is
+        // deliberately excluded from this query so they are never retried indefinitely.
         List<com.ibtrader.infrastructure.persistence.entity.IbCommandOutboxEntity> pending = 
-                jpaRepository.findByStatusAndNextRetryAtLessThanEqual(
-                com.ibtrader.infrastructure.persistence.entity.IbCommandStatus.PENDING, java.time.Instant.now());
+                jpaRepository.findByStatusInAndNextRetryAtLessThanEqual(
+                java.util.List.of(
+                        com.ibtrader.infrastructure.persistence.entity.IbCommandStatus.PENDING,
+                        com.ibtrader.infrastructure.persistence.entity.IbCommandStatus.FAILED),
+                java.time.Instant.now());
 
         for (com.ibtrader.infrastructure.persistence.entity.IbCommandOutboxEntity entity : pending) {
             try {
@@ -63,7 +68,10 @@ public class OrderExecutionEngine {
                     String accountId = ibConnectionProperties.getAccountId();
                     if (accountId == null || accountId.isEmpty()) accountId = "UNKNOWN";
 
-                    UUID assetId = assetRepository.findBySymbol(symbol).map(a -> a.getId()).orElse(UUID.randomUUID());
+                    UUID assetId = assetRepository.findBySymbol(symbol)
+                            .map(a -> a.getId())
+                            .orElseThrow(() -> new IllegalStateException(
+                                    "Cannot submit order: asset not registered for symbol " + symbol));
                     String strategyId = payload.path("strategyId").asText(null);
 
                     Order order;
@@ -87,11 +95,17 @@ public class OrderExecutionEngine {
             } catch (Exception e) {
                 log.error("Failed to process outbox command {}: {}", entity.getId(), e.getMessage());
                 entity.setAttemptCount(entity.getAttemptCount() + 1);
+                entity.setErrorMessage(e.getMessage());
+                entity.setLastAttemptAt(java.time.Instant.now());
                 if (entity.getAttemptCount() >= entity.getMaxAttempts()) {
-                    entity.setStatus(com.ibtrader.infrastructure.persistence.entity.IbCommandStatus.FAILED);
+                    // Terminal state: SKIPPED is deliberately excluded from the query above
+                    // so dead-lettered commands are never retried indefinitely.
+                    entity.setStatus(com.ibtrader.infrastructure.persistence.entity.IbCommandStatus.SKIPPED);
                 } else {
+                    entity.setStatus(com.ibtrader.infrastructure.persistence.entity.IbCommandStatus.FAILED);
                     entity.setNextRetryAt(java.time.Instant.now().plusSeconds((long) Math.pow(2, entity.getAttemptCount()) * 5));
                 }
+                entity.setUpdatedAt(java.time.Instant.now());
             }
             jpaRepository.save(entity);
         }

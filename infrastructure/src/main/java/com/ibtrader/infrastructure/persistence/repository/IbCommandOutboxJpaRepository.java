@@ -11,8 +11,6 @@ import java.util.UUID;
 
 @Repository
 public interface IbCommandOutboxJpaRepository extends JpaRepository<IbCommandOutboxEntity, UUID> {
-    List<IbCommandOutboxEntity> findByStatusAndNextRetryAtLessThanEqual(IbCommandStatus status, Instant nextRetryAt);
-
     List<IbCommandOutboxEntity> findByStatusInAndNextRetryAtLessThanEqual(
             List<IbCommandStatus> statuses,
             Instant nextRetryAt);
