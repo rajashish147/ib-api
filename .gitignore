@@ -40,11 +40,11 @@ logs/
 Thumbs.db
 desktop.ini
 
-# ── Test reports & coverage ───────────────────────────────────────────────────
-**/build/reports/
-**/build/jacoco/
-**/build/jacocoHtml/
-**/build/tmp/
+# ── Gradle / IDE build directories ────────────────────────────────────────────
+# (project uses Maven for CI, but local IDE/Gradle runs create these)
+**/build/
+build/
+
 
 # ── Docker volumes ────────────────────────────────────────────────────────────
 docker/volumes/
