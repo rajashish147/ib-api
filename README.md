@@ -99,42 +99,46 @@ libs/
 └── TwsApi-10.19.jar   ← required (not included, must be obtained from IBKR)
 ```
 
-### 4. Build & Run
+### 4. Configure .env
 
 ```bash
-# Build all modules (skip tests for first run)
-./maven/apache-maven-3.9.6/bin/mvn clean package -pl bootstrap -am -DskipTests
-
-# Run with environment variables
-java -jar bootstrap/target/ib-trader.jar \
-  --spring.datasource.url=jdbc:postgresql://localhost:5432/ibtrader \
-  --spring.datasource.username=ibtrader \
-  --spring.datasource.password=yourpassword \
-  --IB_ENABLED=true \
-  --IB_HOST=127.0.0.1 \
-  --IB_PORT=4002 \
-  --IB_CLIENT_ID=1 \
-  --IB_PAPER_TRADING=true \
-  --IB_ACCOUNT_ID=DUP854695
+# Copy the example and fill in your values
+cp .env.example .env
 ```
 
-Or using environment variables:
+Edit `.env` — all variables are loaded automatically by the application at startup (via [spring-dotenv](https://github.com/paulschwarz/spring-dotenv)):
+
+```env
+DB_URL=jdbc:postgresql://localhost:5432/ibtrader
+DB_USERNAME=ibtrader
+DB_PASSWORD=yourpassword
+
+IB_ENABLED=true
+IB_HOST=127.0.0.1
+IB_PORT=4002
+IB_ACCOUNT_ID=DU1234567
+```
+
+### 5. Build & Run
 
 ```bash
-export DB_URL=jdbc:postgresql://localhost:5432/ibtrader
-export DB_USERNAME=ibtrader
-export DB_PASSWORD=yourpassword
-export IB_ENABLED=true
-export IB_HOST=127.0.0.1
-export IB_PORT=4002
-export IB_CLIENT_ID=1
-export IB_PAPER_TRADING=true
-export IB_ACCOUNT_ID=DUP854695
+# Build
+make build
 
+# Run (reads config from .env automatically — no flags needed)
+make run
+
+# Or build + run in one step
+make dev
+```
+
+On Windows without `make`:
+```cmd
+mvnw.cmd clean package -pl bootstrap -am -DskipTests -q
 java -jar bootstrap/target/ib-trader.jar
 ```
 
-### 5. Frontend
+### 6. Frontend
 
 ```bash
 cd frontend
@@ -143,6 +147,7 @@ npm start
 ```
 
 The dev server runs at `http://localhost:4200` and proxies `/api` → `http://localhost:8080`.
+
 
 ---
 
