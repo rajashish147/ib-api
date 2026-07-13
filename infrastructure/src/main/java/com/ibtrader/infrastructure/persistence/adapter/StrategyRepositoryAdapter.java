@@ -18,8 +18,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Repository
@@ -117,13 +119,32 @@ public class StrategyRepositoryAdapter implements StrategyRepository {
     }
 
     private List<TradingStrategy> mapEntitiesToDomain(List<TradingStrategyEntity> entities) {
+        if (entities.isEmpty()) {
+            return List.of();
+        }
+
+        // Batch-fetch versions and targets for all strategies instead of querying per-strategy
+        // (avoids N+1 queries when listing active/all strategies).
+        List<UUID> strategyIds = entities.stream().map(TradingStrategyEntity::getId).toList();
+
+        Map<UUID, TradingStrategyVersionEntity> latestVersionByStrategyId = versionJpaRepository
+                .findByStrategyIdIn(strategyIds).stream()
+                .collect(Collectors.toMap(
+                        TradingStrategyVersionEntity::getStrategyId,
+                        version -> version,
+                        (a, b) -> a.getVersionNumber() >= b.getVersionNumber() ? a : b));
+
+        Map<UUID, List<StrategyBasketTargetEntity>> targetsByStrategyId = targetJpaRepository
+                .findByStrategyIdIn(strategyIds).stream()
+                .collect(Collectors.groupingBy(StrategyBasketTargetEntity::getStrategyId));
+
         List<TradingStrategy> strategies = new ArrayList<>();
         for (TradingStrategyEntity entity : entities) {
-            Optional<TradingStrategyVersionEntity> versionOpt = 
-                    versionJpaRepository.findFirstByStrategyIdOrderByVersionNumberDesc(entity.getId());
-            if (versionOpt.isPresent()) {
-                List<StrategyBasketTargetEntity> targets = targetJpaRepository.findByStrategyId(entity.getId());
-                strategies.add(strategyMapper.toDomain(entity, versionOpt.get(), targets));
+            TradingStrategyVersionEntity version = latestVersionByStrategyId.get(entity.getId());
+            if (version != null) {
+                List<StrategyBasketTargetEntity> targets =
+                        targetsByStrategyId.getOrDefault(entity.getId(), List.of());
+                strategies.add(strategyMapper.toDomain(entity, version, targets));
             }
         }
         return strategies;

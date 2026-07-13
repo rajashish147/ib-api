@@ -12,4 +12,5 @@ import java.util.UUID;
 public interface TradingStrategyVersionJpaRepository extends JpaRepository<TradingStrategyVersionEntity, UUID> {
     List<TradingStrategyVersionEntity> findByStrategyId(UUID strategyId);
     Optional<TradingStrategyVersionEntity> findFirstByStrategyIdOrderByVersionNumberDesc(UUID strategyId);
+    List<TradingStrategyVersionEntity> findByStrategyIdIn(List<UUID> strategyIds);
 }

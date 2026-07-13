@@ -1,7 +1,6 @@
 package com.ibtrader.infrastructure.persistence.adapter;
 
 import com.ibtrader.domain.model.portfolio.Portfolio;
-import com.ibtrader.domain.model.portfolio.Position;
 import com.ibtrader.domain.port.outbound.PortfolioRepository;
 import com.ibtrader.infrastructure.persistence.entity.PortfolioSnapshotEntity;
 import com.ibtrader.infrastructure.persistence.entity.PositionEntity;
@@ -13,6 +12,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
@@ -43,12 +43,15 @@ public class PortfolioRepositoryAdapter implements PortfolioRepository {
     }
 
     @Override
+    @Transactional
     public Portfolio save(Portfolio portfolio) {
-        // Save positions
-        for (Position pos : portfolio.getPositions()) {
-            PositionEntity entity = positionMapper.toEntity(pos);
-            positionJpaRepository.save(entity);
-        }
+        // Save positions atomically -- without an explicit transaction boundary, each
+        // individual save() call below would commit independently, risking partially
+        // persisted positions if a later save in the loop fails.
+        List<PositionEntity> entities = portfolio.getPositions().stream()
+                .map(positionMapper::toEntity)
+                .toList();
+        positionJpaRepository.saveAll(entities);
         return portfolio;
     }
 

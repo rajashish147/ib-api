@@ -10,5 +10,6 @@ import java.util.UUID;
 @Repository
 public interface StrategyBasketTargetJpaRepository extends JpaRepository<StrategyBasketTargetEntity, UUID> {
     List<StrategyBasketTargetEntity> findByStrategyId(UUID strategyId);
+    List<StrategyBasketTargetEntity> findByStrategyIdIn(List<UUID> strategyIds);
     void deleteByStrategyId(UUID strategyId);
 }

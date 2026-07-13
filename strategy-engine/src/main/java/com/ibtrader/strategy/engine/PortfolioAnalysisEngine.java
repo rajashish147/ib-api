@@ -61,31 +61,11 @@ public class PortfolioAnalysisEngine implements PortfolioAnalysisPort {
         Map<AssetClass, Money> assetClassExposure = new EnumMap<>(AssetClass.class);
         Map<String, Money> sectorExposure = new HashMap<>();
         
-        Percentage maxConcentration = Percentage.of(BigDecimal.ZERO);
-        Money totalPositionValue = Money.of(BigDecimal.ZERO, currency);
+        PositionMetrics metrics = accumulatePositionMetrics(
+                portfolio, nlvAmount, currency, positionAllocation, assetClassExposure, sectorExposure);
+        Money totalPositionValue = metrics.totalPositionValue();
+        Percentage maxConcentration = metrics.maxConcentration();
 
-        for (Position position : portfolio.getPositions()) {
-            if (position.isClosed()) continue;
-
-            Money mv = position.getMarketValue();
-            Optional<BigDecimal> latestPrice = marketDataCache.getPrice(position.getAssetId());
-            if (latestPrice.isPresent()) {
-                BigDecimal newValue = latestPrice.get().multiply(position.getQuantity().abs());
-                mv = Money.of(newValue, mv.getCurrency());
-            }
-
-            totalPositionValue = totalPositionValue.add(mv);
-            
-            Percentage alloc = calculateAllocation(mv, nlvAmount);
-            positionAllocation.put(position.getAssetId(), alloc);
-            
-            if (alloc.getValue().compareTo(maxConcentration.getValue()) > 0) {
-                maxConcentration = alloc;
-            }
-
-            accumulateExposures(position, mv, assetClassExposure, sectorExposure);
-        }
-        
         convertExposuresToAllocations(assetClassExposure, sectorExposure, nlvAmount, 
                                       assetClassAllocation, sectorAllocation);
 
@@ -122,12 +102,54 @@ public class PortfolioAnalysisEngine implements PortfolioAnalysisPort {
                 leverage, marginUsage, drawdown, riskScore, largestHoldings);
     }
     
-    private void accumulateExposures(Position position, Money mv, 
+    private record PositionMetrics(Money totalPositionValue, Percentage maxConcentration) {}
+
+    /**
+     * Walks the portfolio's open positions once, accumulating per-position allocation
+     * and exposure data. Assets are prefetched in bulk beforehand to avoid an N+1
+     * query pattern (one lookup per position).
+     */
+    private PositionMetrics accumulatePositionMetrics(Portfolio portfolio, BigDecimal nlvAmount, String currency,
+                                                       Map<UUID, Percentage> positionAllocation,
+                                                       Map<AssetClass, Money> assetClassExposure,
+                                                       Map<String, Money> sectorExposure) {
+        Map<UUID, Asset> assetsById = assetRepository.findAll().stream()
+                .collect(Collectors.toMap(Asset::getId, asset -> asset));
+
+        Percentage maxConcentration = Percentage.of(BigDecimal.ZERO);
+        Money totalPositionValue = Money.of(BigDecimal.ZERO, currency);
+
+        for (Position position : portfolio.getPositions()) {
+            if (position.isClosed()) continue;
+
+            Money mv = position.getMarketValue();
+            Optional<BigDecimal> latestPrice = marketDataCache.getPrice(position.getAssetId());
+            if (latestPrice.isPresent()) {
+                BigDecimal newValue = latestPrice.get().multiply(position.getQuantity().abs());
+                mv = Money.of(newValue, mv.getCurrency());
+            }
+
+            totalPositionValue = totalPositionValue.add(mv);
+
+            Percentage alloc = calculateAllocation(mv, nlvAmount);
+            positionAllocation.put(position.getAssetId(), alloc);
+
+            if (alloc.getValue().compareTo(maxConcentration.getValue()) > 0) {
+                maxConcentration = alloc;
+            }
+
+            accumulateExposures(position, mv, assetsById, assetClassExposure, sectorExposure);
+        }
+
+        return new PositionMetrics(totalPositionValue, maxConcentration);
+    }
+
+    private void accumulateExposures(Position position, Money mv,
+                                     Map<UUID, Asset> assetsById,
                                      Map<AssetClass, Money> assetClassExposure, 
                                      Map<String, Money> sectorExposure) {
-        Optional<Asset> assetOpt = assetRepository.findById(position.getAssetId());
-        if (assetOpt.isPresent()) {
-            Asset asset = assetOpt.get();
+        Asset asset = assetsById.get(position.getAssetId());
+        if (asset != null) {
             assetClassExposure.merge(asset.getAssetClass(), mv, Money::add);
             String sector = "UNKNOWN"; // Placeholder
             sectorExposure.merge(sector, mv, Money::add);
