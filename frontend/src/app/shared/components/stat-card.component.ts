@@ -1,5 +1,4 @@
 import { ChangeDetectionStrategy, Component, Input } from '@angular/core';
-import { CommonModule } from '@angular/common';
 import { MATERIAL_IMPORTS } from '../material.imports';
 
 export type StatCardState = 'loading' | 'error' | 'ok';
@@ -7,7 +6,7 @@ export type StatCardState = 'loading' | 'error' | 'ok';
 @Component({
   selector: 'app-stat-card',
   standalone: true,
-  imports: [CommonModule, ...MATERIAL_IMPORTS],
+  imports: [...MATERIAL_IMPORTS],
   template: `
     <mat-card class="stat-card surface card" [class.error-state]="state === 'error'" [class.loading-state]="state === 'loading'">
       <div class="label-row">
@@ -62,4 +61,4 @@ export class StatCardComponent {
   @Input() trend = '';
   @Input() icon = '';
   @Input() state: StatCardState = 'ok';
-}
+}

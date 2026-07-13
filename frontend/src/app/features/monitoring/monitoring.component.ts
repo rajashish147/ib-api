@@ -90,7 +90,7 @@ interface MonitorTile {
           <div class="info-title"><mat-icon>info_outline</mat-icon> App Info</div>
           <div class="info-body">
             <div class="info-row"><span class="muted">Backend</span><strong>Spring Boot 3</strong></div>
-            <div class="info-row"><span class="muted">Frontend</span><strong>Angular 20 + Vite</strong></div>
+            <div class="info-row"><span class="muted">Frontend</span><strong>Angular 20 (CLI / esbuild)</strong></div>
             <div class="info-row"><span class="muted">Architecture</span><strong>Hexagonal / DDD</strong></div>
             <div class="info-row"><span class="muted">API Base</span><strong>/api/v1</strong></div>
           </div>
@@ -150,12 +150,12 @@ export class MonitoringComponent implements OnInit {
     this.healthSignal.update((s) => ({ ...s, loading: true, error: false }));
     this.engineStatusSignal.update((s) => ({ ...s, loading: true, error: false }));
 
-    this.monitoringApi.getHealth().subscribe({
+    this.monitoringApi.getHealth().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (health) => this.healthSignal.set({ status: health.status, loading: false, error: false }),
       error: () => this.healthSignal.set({ status: 'DOWN', loading: false, error: true })
     });
 
-    this.engineApi.getStatus().subscribe({
+    this.engineApi.getStatus().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (status) => this.engineStatusSignal.set({ status: status.status, loading: false, error: false }),
       error: () => this.engineStatusSignal.set({ status: 'error', loading: false, error: true })
     });

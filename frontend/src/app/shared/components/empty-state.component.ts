@@ -1,11 +1,10 @@
 import { ChangeDetectionStrategy, Component, Input } from '@angular/core';
-import { CommonModule } from '@angular/common';
 import { MATERIAL_IMPORTS } from '../material.imports';
 
 @Component({
   selector: 'app-empty-state',
   standalone: true,
-  imports: [CommonModule, ...MATERIAL_IMPORTS],
+  imports: [...MATERIAL_IMPORTS],
   template: `
     <mat-card class="surface card empty-state">
       <mat-icon>{{ icon }}</mat-icon>

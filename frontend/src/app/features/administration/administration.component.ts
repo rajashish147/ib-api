@@ -1,11 +1,10 @@
 import { ChangeDetectionStrategy, Component } from '@angular/core';
-import { CommonModule } from '@angular/common';
 import { MATERIAL_IMPORTS } from '../../shared/material.imports';
 
 @Component({
   selector: 'app-administration',
   standalone: true,
-  imports: [CommonModule, ...MATERIAL_IMPORTS],
+  imports: [...MATERIAL_IMPORTS],
   template: `
     <section class="page grid">
       <mat-card class="surface card header-card">

@@ -1,5 +1,5 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { PageEvent } from '@angular/material/paginator';
 import { debounceTime, distinctUntilChanged, startWith } from 'rxjs';
@@ -11,7 +11,7 @@ import { EmptyStateComponent } from '../../shared/components/empty-state.compone
 @Component({
   selector: 'app-portfolio',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, ...MATERIAL_IMPORTS, EmptyStateComponent],
+  imports: [ReactiveFormsModule, ...MATERIAL_IMPORTS, EmptyStateComponent],
   template: `
     <section class="page grid">
       <mat-card class="surface card header-card">
@@ -159,6 +159,8 @@ import { EmptyStateComponent } from '../../shared/components/empty-state.compone
 })
 export class PortfolioComponent {
   private readonly portfolioApi = inject(PortfolioApiService);
+  private readonly destroyRef = inject(DestroyRef);
+  private syncTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
   readonly searchControl = new FormControl('', { nonNullable: true });
   readonly displayedColumns = ['symbol', 'quantity', 'averageCost', 'marketPrice', 'marketValue', 'unrealizedPnL', 'sector'] as const;
@@ -173,21 +175,28 @@ export class PortfolioComponent {
   constructor() {
     this.load();
 
-    this.searchControl.valueChanges.pipe(startWith(''), debounceTime(150), distinctUntilChanged()).subscribe((value) => {
+    this.searchControl.valueChanges.pipe(startWith(''), debounceTime(150), distinctUntilChanged(), takeUntilDestroyed()).subscribe((value) => {
       const normalized = value.trim().toUpperCase();
       const basePositions = this.portfolio()?.positions ?? [];
       this.positions.set(basePositions.filter((position) => position.symbol.includes(normalized)));
       this.pageIndex.set(0); // reset to first page on search
+    });
+
+    this.destroyRef.onDestroy(() => {
+      if (this.syncTimeoutId !== null) {
+        clearTimeout(this.syncTimeoutId);
+      }
     });
   }
 
   syncPositions(): void {
     this.syncing.set(true);
     this.syncError.set(false);
-    this.portfolioApi.reconcilePositions().subscribe({
+    this.portfolioApi.reconcilePositions().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: () => {
         // IB callbacks are async — wait 3 s then reload
-        setTimeout(() => {
+        this.syncTimeoutId = setTimeout(() => {
+          this.syncTimeoutId = null;
           this.syncing.set(false);
           this.load();
         }, 3000);
@@ -201,7 +210,7 @@ export class PortfolioComponent {
 
   load(): void {
     this.error.set(false);
-    this.portfolioApi.getPortfolio().subscribe({
+    this.portfolioApi.getPortfolio().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (portfolio) => {
         this.portfolio.set(portfolio);
         this.positions.set(portfolio.positions);
@@ -240,8 +249,9 @@ export class PortfolioComponent {
   }
 
   exportCsv(): void {
-    const rows = this.visiblePositions().map((row) => [row.symbol, row.quantity, row.averageCost.amount, row.marketPrice.amount, row.marketValue.amount, row.unrealizedPnL.amount, 'N/A']);
-    const csv = ['Ticker,Quantity,Average Price,Current Price,Market Value,PnL,Sector', ...rows.map((row) => row.join(','))].join('\n');
+    // Export all filtered positions, not just the current page.
+    const rows = this.positions().map((row) => [row.symbol, row.quantity, row.averageCost.amount, row.marketPrice.amount, row.marketValue.amount, row.unrealizedPnL.amount, row.assetClass ?? 'N/A']);
+    const csv = ['Ticker,Quantity,Average Price,Current Price,Market Value,PnL,Asset Class', ...rows.map((row) => row.join(','))].join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);

@@ -1,5 +1,4 @@
 import { AfterViewInit, ChangeDetectionStrategy, Component, ElementRef, Input, OnChanges, OnDestroy, SimpleChanges, ViewChild } from '@angular/core';
-import { CommonModule } from '@angular/common';
 import { Chart, ChartConfiguration, ChartData, registerables } from 'chart.js';
 import { MATERIAL_IMPORTS } from '../material.imports';
 
@@ -8,7 +7,7 @@ Chart.register(...registerables);
 @Component({
   selector: 'app-chart-card',
   standalone: true,
-  imports: [CommonModule, ...MATERIAL_IMPORTS],
+  imports: [...MATERIAL_IMPORTS],
   template: `
     <mat-card class="chart-card surface card">
       <div class="header">
@@ -102,12 +101,12 @@ export class ChartCardComponent implements AfterViewInit, OnChanges, OnDestroy {
         scales: this.chartType === 'doughnut'
           ? undefined
           : {
-              x: { ticks: { color: getComputedStyle(document.documentElement).getPropertyValue('--app-text-muted') }, grid: { color: 'rgba(148, 163, 184, 0.12)' } },
-              y: { ticks: { color: getComputedStyle(document.documentElement).getPropertyValue('--app-text-muted') }, grid: { color: 'rgba(148, 163, 184, 0.12)' } }
+              x: { ticks: { color: getComputedStyle(document.documentElement).getPropertyValue('--app-text-muted') }, grid: { color: getComputedStyle(document.documentElement).getPropertyValue('--app-border') } },
+              y: { ticks: { color: getComputedStyle(document.documentElement).getPropertyValue('--app-text-muted') }, grid: { color: getComputedStyle(document.documentElement).getPropertyValue('--app-border') } }
             }
       }
     };
 
     this.chart = new Chart(this.canvas.nativeElement, config);
   }
-}
+}

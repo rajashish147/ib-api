@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink } from '@angular/router';
-import { filter, startWith } from 'rxjs';
+import { filter, map, startWith } from 'rxjs';
 
 interface BreadcrumbItem {
   readonly label: string;
@@ -11,7 +11,7 @@ interface BreadcrumbItem {
 @Component({
   selector: 'app-breadcrumbs',
   standalone: true,
-  imports: [CommonModule, RouterLink],
+  imports: [RouterLink],
   template: `
     <nav class="breadcrumbs" aria-label="Breadcrumb">
       @for (item of items(); track item.url; let last = $last) {
@@ -34,8 +34,20 @@ interface BreadcrumbItem {
 export class BreadcrumbsComponent {
   private readonly router = inject(Router);
 
+  // Router.url is a plain property, not a signal, so it must be tracked via
+  // NavigationEnd events — otherwise `items` would never recompute after the
+  // first render on this OnPush component.
+  private readonly currentUrl = toSignal(
+    this.router.events.pipe(
+      filter((event): event is NavigationEnd => event instanceof NavigationEnd),
+      map(() => this.router.url),
+      startWith(this.router.url)
+    ),
+    { initialValue: this.router.url }
+  );
+
   readonly items = computed<BreadcrumbItem[]>(() => {
-    const segments = this.router.url.split('/').filter(Boolean);
+    const segments = this.currentUrl().split('/').filter(Boolean);
     const items: BreadcrumbItem[] = [{ label: 'Home', url: '/app/dashboard' }];
 
     let current = '/app';

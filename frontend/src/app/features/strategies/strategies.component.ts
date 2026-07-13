@@ -1,15 +1,17 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
+import { MatDialog } from '@angular/material/dialog';
 import { MATERIAL_IMPORTS } from '../../shared/material.imports';
 import { StrategyApiService } from '../../core/services/strategy-api.service';
 import { BasketTargetRequestDto, StrategyDto } from '../../core/models/api.models';
 import { EmptyStateComponent } from '../../shared/components/empty-state.component';
+import { ConfirmDialogComponent } from '../../shared/components/confirm-dialog.component';
 
 @Component({
   selector: 'app-strategies',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, ...MATERIAL_IMPORTS, EmptyStateComponent],
+  imports: [ReactiveFormsModule, ...MATERIAL_IMPORTS, EmptyStateComponent],
   template: `
     <section class="page grid">
       <mat-card class="surface card header-card">
@@ -36,7 +38,13 @@ import { EmptyStateComponent } from '../../shared/components/empty-state.compone
               <div class="form-hint">{{ editingStrategyId() ? 'Editing updates the selected record.' : 'Fill in the details to create a new strategy.' }}</div>
             </div>
             <form class="strategy-form" [formGroup]="form">
-              <mat-form-field appearance="outline"><mat-label>Name *</mat-label><input matInput formControlName="name" placeholder="GOOGL Single Share" /><mat-error *ngIf="form.get('name')?.errors?.['required']">Name is required</mat-error></mat-form-field>
+              <mat-form-field appearance="outline">
+                <mat-label>Name *</mat-label>
+                <input matInput formControlName="name" placeholder="GOOGL Single Share" />
+                @if (form.get('name')?.errors?.['required']) {
+                  <mat-error>Name is required</mat-error>
+                }
+              </mat-form-field>
               <mat-form-field appearance="outline"><mat-label>Description</mat-label><input matInput formControlName="description" placeholder="Buy 1 share at $150, sell at $200" /></mat-form-field>
               <mat-form-field appearance="outline"><mat-label>Priority</mat-label><input matInput type="number" formControlName="priority" placeholder="0" /></mat-form-field>
               <mat-form-field appearance="outline"><mat-label>Cooldown (min)</mat-label><input matInput type="number" formControlName="cooldownMinutes" placeholder="60" /></mat-form-field>
@@ -113,10 +121,15 @@ import { EmptyStateComponent } from '../../shared/components/empty-state.compone
             <mat-card class="surface card list-card">
               <div class="list-header">{{ strategies().length }} strategies</div>
               @for (strategy of strategies(); track strategy.id) {
-                <div class="strategy-row" role="button" tabindex="0" (click)="edit(strategy)" [class.selected]="editingStrategyId() === strategy.id">
+                <div class="strategy-row" role="button" tabindex="0"
+                     [attr.aria-pressed]="editingStrategyId() === strategy.id"
+                     [class.selected]="editingStrategyId() === strategy.id"
+                     (click)="edit(strategy)"
+                     (keydown.enter)="edit(strategy)"
+                     (keydown.space)="$event.preventDefault(); edit(strategy)">
                   <div class="strategy-summary">
                     <div class="strategy-name">
-                      <span class="status-dot" [class.enabled]="strategy.enabled" [class.disabled]="!strategy.enabled"></span>
+                      <span class="status-dot" [class.enabled]="strategy.enabled" [class.disabled]="!strategy.enabled" [attr.aria-label]="strategy.enabled ? 'Enabled' : 'Disabled'"></span>
                       {{ strategy.name }}
                     </div>
                     <div class="muted">{{ strategy.riskProfile }} · {{ strategy.executionMode }} · priority {{ strategy.priority }}</div>
@@ -124,7 +137,7 @@ import { EmptyStateComponent } from '../../shared/components/empty-state.compone
                   </div>
                   <div class="strategy-actions">
                     <button mat-stroked-button (click)="$event.stopPropagation(); toggle(strategy)">{{ strategy.enabled ? 'Disable' : 'Enable' }}</button>
-                    <button mat-stroked-button color="warn" (click)="$event.stopPropagation(); remove(strategy.id)">Delete</button>
+                    <button mat-stroked-button color="warn" (click)="$event.stopPropagation(); remove(strategy)">Delete</button>
                   </div>
                 </div>
               }
@@ -160,8 +173,9 @@ import { EmptyStateComponent } from '../../shared/components/empty-state.compone
     .list-header { padding: 1rem 1.25rem 0.75rem; font-weight: 700; font-size: 0.85rem; color: var(--app-text-muted); text-transform: uppercase; letter-spacing: 0.06em; border-bottom: 1px solid var(--app-border); }
     .strategy-row { width: 100%; display: flex; justify-content: space-between; gap: 1rem; padding: 1rem 1.25rem; border: 0; border-bottom: 1px solid var(--app-border); background: transparent; color: inherit; text-align: left; cursor: pointer; transition: background 0.15s; }
     .strategy-row:last-child { border-bottom: 0; }
-    .strategy-row:hover { background: rgba(79, 140, 255, 0.06); }
+    .strategy-row:hover { background: color-mix(in srgb, var(--app-primary) 6%, transparent); }
     .strategy-row.selected { background: color-mix(in srgb, var(--app-primary) 10%, transparent); }
+    .strategy-row:focus-visible { outline: 2px solid var(--app-primary); outline-offset: -2px; }
     .strategy-summary { display: grid; gap: 0.25rem; min-width: 0; }
     .strategy-name { font-weight: 700; display: flex; align-items: center; gap: 0.5rem; }
     .status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
@@ -175,6 +189,8 @@ import { EmptyStateComponent } from '../../shared/components/empty-state.compone
 })
 export class StrategiesComponent {
   private readonly strategyApi = inject(StrategyApiService);
+  private readonly dialog = inject(MatDialog);
+  private readonly destroyRef = inject(DestroyRef);
 
   readonly strategies = signal<readonly StrategyDto[]>([]);
   readonly editingStrategy = signal<StrategyDto | null>(null);
@@ -204,7 +220,7 @@ export class StrategiesComponent {
 
   refresh(): void {
     this.error.set(false);
-    this.strategyApi.getAllStrategies().subscribe({
+    this.strategyApi.getAllStrategies().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (strategies) => this.strategies.set(strategies),
       error: () => this.error.set(true)
     });
@@ -288,7 +304,7 @@ export class StrategiesComponent {
       ? this.strategyApi.updateStrategy(this.editingStrategyId()!, request)
       : this.strategyApi.createStrategy(request);
 
-    action$.subscribe({
+    action$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: () => {
         this.closeForm();
         this.refresh();
@@ -299,16 +315,37 @@ export class StrategiesComponent {
 
   toggle(strategy: StrategyDto): void {
     const action = strategy.enabled ? this.strategyApi.disableStrategy(strategy.id) : this.strategyApi.enableStrategy(strategy.id);
-    action.subscribe({
+    action.pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: () => this.refresh(),
       error: () => { /* handled by interceptor */ }
     });
   }
 
-  remove(id: string): void {
-    this.strategyApi.deleteStrategy(id).subscribe({
-      next: () => this.refresh(),
-      error: () => { /* handled by interceptor */ }
-    });
+  remove(strategy: StrategyDto): void {
+    this.dialog
+      .open(ConfirmDialogComponent, {
+        data: {
+          title: 'Delete strategy',
+          message: `Delete "${strategy.name}"? This cannot be undone.`,
+          confirmLabel: 'Delete'
+        },
+        autoFocus: 'first-tabbable'
+      })
+      .afterClosed()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((confirmed) => {
+        if (!confirmed) {
+          return;
+        }
+
+        if (this.editingStrategyId() === strategy.id) {
+          this.closeForm();
+        }
+
+        this.strategyApi.deleteStrategy(strategy.id).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+          next: () => this.refresh(),
+          error: () => { /* handled by interceptor */ }
+        });
+      });
   }
 }

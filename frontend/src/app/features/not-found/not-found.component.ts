@@ -1,16 +1,15 @@
 import { ChangeDetectionStrategy, Component } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { MATERIAL_IMPORTS } from '../../shared/material.imports';
-import { CommonModule } from '@angular/common';
 
 @Component({
   selector: 'app-not-found',
   standalone: true,
-  imports: [CommonModule, RouterLink, ...MATERIAL_IMPORTS],
+  imports: [RouterLink, ...MATERIAL_IMPORTS],
   template: `
     <section class="not-found surface card">
       <h1>404</h1>
-      <p>That route does not exist. Return to the dashboard or sign in again.</p>
+      <p>That route does not exist. Check the URL or return to the dashboard.</p>
       <button mat-flat-button color="primary" routerLink="/app/dashboard">Go to dashboard</button>
     </section>
   `,

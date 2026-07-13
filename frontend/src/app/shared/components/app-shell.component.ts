@@ -1,6 +1,7 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
-import { CommonModule } from '@angular/common';
-import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { filter, map, startWith } from 'rxjs';
 import { MATERIAL_IMPORTS } from '../material.imports';
 import { ThemeService } from '../../core/services/theme.service';
 import { LoadingService } from '../../core/services/loading.service';
@@ -16,7 +17,7 @@ interface NavItem {
 @Component({
   selector: 'app-shell',
   standalone: true,
-  imports: [CommonModule, RouterOutlet, RouterLink, RouterLinkActive, BreadcrumbsComponent, ...MATERIAL_IMPORTS],
+  imports: [RouterOutlet, RouterLink, RouterLinkActive, BreadcrumbsComponent, ...MATERIAL_IMPORTS],
   template: `
     <mat-sidenav-container class="shell">
       <mat-sidenav mode="side" [opened]="sidebarOpened()" class="nav surface">
@@ -88,7 +89,7 @@ interface NavItem {
     .spacer { flex: 1; }
     .theme-btn { flex-shrink: 0; }
     .main-panel { flex: 1; min-height: 0; }
-    .active-link { background: rgba(79, 140, 255, 0.15) !important; color: var(--app-primary) !important; border-radius: var(--radius-sm); }
+    .active-link { background: color-mix(in srgb, var(--app-primary) 15%, transparent) !important; color: var(--app-primary) !important; border-radius: var(--radius-sm); }
     @media (max-width: 960px) {
       .nav { display: none; }
       .content { padding: 0.75rem; }
@@ -102,6 +103,22 @@ export class AppShellComponent {
   private readonly router = inject(Router);
 
   readonly sidebarOpened = signal(true);
+
+  // Router.url is a plain property, not a signal — track NavigationEnd events
+  // explicitly so the page title recomputes on every navigation.
+  private readonly currentUrl = toSignal(
+    this.router.events.pipe(
+      filter((event): event is NavigationEnd => event instanceof NavigationEnd),
+      map(() => this.router.url),
+      startWith(this.router.url)
+    ),
+    { initialValue: this.router.url }
+  );
+
+  readonly pageTitle = computed(() => {
+    const activeRoute = this.currentUrl().split('/').at(-1) ?? 'dashboard';
+    return activeRoute.replace(/-/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
+  });
 
   readonly navItems: readonly NavItem[] = [
     // Overview
@@ -125,11 +142,6 @@ export class AppShellComponent {
     { label: 'Administration', icon: 'admin_panel_settings', path: '/app/administration' },
     { label: 'Settings', icon: 'settings', path: '/app/settings' }
   ];
-
-  pageTitle(): string {
-    const activeRoute = this.router.url.split('/').at(-1) ?? 'dashboard';
-    return activeRoute.replace(/-/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
-  }
 
   toggleSidebar(): void {
     this.sidebarOpened.update((value) => !value);

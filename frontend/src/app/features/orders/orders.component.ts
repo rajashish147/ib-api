@@ -1,6 +1,6 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
-import { ReactiveFormsModule } from '@angular/forms';
 import { MATERIAL_IMPORTS } from '../../shared/material.imports';
 import { EngineApiService } from '../../core/services/engine-api.service';
 import { ApprovalApiService } from '../../core/services/approval-api.service';
@@ -10,7 +10,7 @@ import { EmptyStateComponent } from '../../shared/components/empty-state.compone
 @Component({
   selector: 'app-orders',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, ...MATERIAL_IMPORTS, EmptyStateComponent],
+  imports: [CommonModule, ...MATERIAL_IMPORTS, EmptyStateComponent],
   template: `
     <section class="orders-page grid">
       <mat-card class="surface card section-card">
@@ -37,7 +37,7 @@ import { EmptyStateComponent } from '../../shared/components/empty-state.compone
       <mat-card class="surface card status-card">
         <div class="status-left">
           <div class="status-label">Engine status</div>
-          <div class="status-value">{{ engineStatus() }}</div>
+          <div class="status-value" [class.positive]="isEngineHealthy()" [class.warning]="isEnginePaused()" [class.negative]="isEngineError()">{{ engineStatus() }}</div>
         </div>
         <div class="status-note">{{ engineMessage() }}</div>
       </mat-card>
@@ -45,7 +45,12 @@ import { EmptyStateComponent } from '../../shared/components/empty-state.compone
       @if (approvals().length) {
         <mat-card class="surface card list-card">
           @for (item of approvals(); track item.id) {
-            <div class="approval-row" role="button" tabindex="0" (click)="select(item)" [class.selected]="selectedApproval()?.id === item.id">
+            <div class="approval-row" role="button" tabindex="0"
+                 [attr.aria-pressed]="selectedApproval()?.id === item.id"
+                 [class.selected]="selectedApproval()?.id === item.id"
+                 (click)="select(item)"
+                 (keydown.enter)="select(item)"
+                 (keydown.space)="$event.preventDefault(); select(item)">
               <div class="approval-summary">
                 <strong>{{ item.strategyId }}</strong>
                 <div class="muted">{{ item.triggerType }} · {{ item.mode }} · {{ item.status }}</div>
@@ -90,12 +95,14 @@ import { EmptyStateComponent } from '../../shared/components/empty-state.compone
     .status-card { padding: 1.25rem 1.5rem; display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
     .status-left { display: grid; gap: 0.2rem; }
     .status-label { color: var(--app-text-muted); font-size: 0.82rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
-    .status-value { font-size: 1.4rem; font-weight: 800; text-transform: uppercase; color: var(--app-positive); }
+    .status-value { font-size: 1.4rem; font-weight: 800; text-transform: uppercase; }
     .status-note { color: var(--app-text-muted); font-size: 0.9rem; }
     .list-card, .ticket-card { padding: 1rem; }
     .approval-row { width: 100%; display: flex; justify-content: space-between; gap: 1rem; padding: 1rem 0; border: 0; border-bottom: 1px solid var(--app-border); background: transparent; color: inherit; text-align: left; cursor: pointer; }
     .approval-row:last-child { border-bottom: 0; }
+    .approval-row:hover { background: color-mix(in srgb, var(--app-primary) 5%, transparent); }
     .approval-row.selected { background: color-mix(in srgb, var(--app-primary) 8%, transparent); }
+    .approval-row:focus-visible { outline: 2px solid var(--app-primary); outline-offset: -2px; }
     .approval-summary { display: grid; gap: 0.25rem; }
     .approval-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
     .detail-card { padding: 1rem; display: grid; gap: 0.75rem; }
@@ -111,6 +118,7 @@ import { EmptyStateComponent } from '../../shared/components/empty-state.compone
 export class OrdersComponent {
   private readonly approvalApi = inject(ApprovalApiService);
   private readonly engineApi = inject(EngineApiService);
+  private readonly destroyRef = inject(DestroyRef);
   readonly approvals = signal<readonly RebalancePlanDto[]>([]);
   readonly selectedApproval = signal<RebalancePlanDto | null>(null);
   readonly engineStatus = signal('UNKNOWN');
@@ -121,11 +129,11 @@ export class OrdersComponent {
   }
 
   refresh(): void {
-    this.approvalApi.getPendingApprovals().subscribe({
+    this.approvalApi.getPendingApprovals().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (approvals) => this.approvals.set(approvals),
       error: () => { /* handled by interceptor */ }
     });
-    this.engineApi.getStatus().subscribe({
+    this.engineApi.getStatus().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (status) => {
         this.engineStatus.set(status.status);
         this.engineMessage.set(status.message);
@@ -138,14 +146,14 @@ export class OrdersComponent {
   }
 
   triggerPipeline(): void {
-    this.engineApi.triggerPipeline().subscribe({
+    this.engineApi.triggerPipeline().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: () => this.refresh(),
       error: () => { /* handled by interceptor */ }
     });
   }
 
   pauseEngine(): void {
-    this.engineApi.pause().subscribe({
+    this.engineApi.pause().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (status) => {
         this.engineStatus.set(status.status);
         this.engineMessage.set('Engine paused');
@@ -155,7 +163,7 @@ export class OrdersComponent {
   }
 
   resumeEngine(): void {
-    this.engineApi.resume().subscribe({
+    this.engineApi.resume().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (status) => {
         this.engineStatus.set(status.status);
         this.engineMessage.set('Engine running');
@@ -165,7 +173,7 @@ export class OrdersComponent {
   }
 
   approve(plan: RebalancePlanDto): void {
-    this.approvalApi.approvePlan(plan.id).subscribe({
+    this.approvalApi.approvePlan(plan.id).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: () => {
         this.selectedApproval.set(null);
         this.refresh();
@@ -175,7 +183,7 @@ export class OrdersComponent {
   }
 
   reject(plan: RebalancePlanDto): void {
-    this.approvalApi.rejectPlan(plan.id).subscribe({
+    this.approvalApi.rejectPlan(plan.id).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: () => {
         this.selectedApproval.set(null);
         this.refresh();
@@ -186,5 +194,17 @@ export class OrdersComponent {
 
   select(plan: RebalancePlanDto): void {
     this.selectedApproval.set(plan);
+  }
+
+  isEngineHealthy(): boolean {
+    return /^(running|up)$/i.test(this.engineStatus());
+  }
+
+  isEnginePaused(): boolean {
+    return /^paused$/i.test(this.engineStatus());
+  }
+
+  isEngineError(): boolean {
+    return /^error$/i.test(this.engineStatus());
   }
 }

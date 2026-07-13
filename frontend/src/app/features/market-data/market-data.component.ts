@@ -9,7 +9,7 @@ import {
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { catchError, interval, of, startWith, switchMap } from 'rxjs';
+import { catchError, interval, of, startWith } from 'rxjs';
 import { MATERIAL_IMPORTS } from '../../shared/material.imports';
 import { MarketDataApiService } from '../../core/services/market-data-api.service';
 import { MarketDataQuoteDto } from '../../core/models/api.models';
@@ -38,7 +38,7 @@ import { MarketDataQuoteDto } from '../../core/models/api.models';
             <mat-icon matPrefix>search</mat-icon>
             <input matInput [(ngModel)]="query" placeholder="SPY" />
           </mat-form-field>
-          <button mat-icon-button (click)="refresh()" matTooltip="Refresh quotes" [disabled]="loading()">
+          <button mat-icon-button (click)="refresh()" matTooltip="Refresh quotes" aria-label="Refresh quotes" [disabled]="loading()">
             <mat-icon [class.spinning]="loading()">refresh</mat-icon>
           </button>
         </div>
@@ -80,8 +80,12 @@ import { MarketDataQuoteDto } from '../../core/models/api.models';
           }
 
           @for (item of filteredQuotes(); track item.assetId) {
-            <div class="watch-row" [class.selected]="selectedSymbol() === item.symbol"
-                 (click)="selectSymbol(item)">
+            <div class="watch-row" role="button" tabindex="0"
+                 [attr.aria-pressed]="selectedSymbol() === item.symbol"
+                 [class.selected]="selectedSymbol() === item.symbol"
+                 (click)="selectSymbol(item)"
+                 (keydown.enter)="selectSymbol(item)"
+                 (keydown.space)="$event.preventDefault(); selectSymbol(item)">
               <div>
                 <strong>{{ item.symbol }}</strong>
                 <div class="muted small">
@@ -191,7 +195,7 @@ import { MarketDataQuoteDto } from '../../core/models/api.models';
     .market-grid { display: grid; grid-template-columns: 1fr 1.4fr; gap: 1rem; }
 
     /* Error card */
-    .error-card { display: flex; align-items: center; gap: 1rem; padding: 1rem 1.5rem; border-color: rgba(255,123,123,0.3) !important; }
+    .error-card { display: flex; align-items: center; gap: 1rem; padding: 1rem 1.5rem; border-color: color-mix(in srgb, var(--app-negative) 30%, transparent) !important; }
     .error-icon { color: var(--app-negative); font-size: 2rem; width: 2rem; height: 2rem; }
     .error-title { font-weight: 700; margin-bottom: 0.25rem; }
 
@@ -202,22 +206,28 @@ import { MarketDataQuoteDto } from '../../core/models/api.models';
     .watch-table-header { display: grid; grid-template-columns: 1fr auto auto; gap: 1rem; padding: 0.5rem 1.25rem; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--app-text-muted); border-bottom: 1px solid var(--app-border); }
     .watch-row { display: grid; grid-template-columns: 1fr auto auto; gap: 1rem; padding: 0.85rem 1.25rem; border-bottom: 1px solid var(--app-border); align-items: center; transition: background 0.15s; cursor: pointer; }
     .watch-row:last-child { border-bottom: 0; }
-    .watch-row:hover { background: rgba(79,140,255,0.05); }
-    .watch-row.selected { background: rgba(79,140,255,0.08); }
+    .watch-row:hover { background: color-mix(in srgb, var(--app-primary) 5%, transparent); }
+    .watch-row.selected { background: color-mix(in srgb, var(--app-primary) 8%, transparent); }
+    .watch-row:focus-visible { outline: 2px solid var(--app-primary); outline-offset: -2px; }
     .align-right { text-align: right; }
     .price-col { font-weight: 600; font-variant-numeric: tabular-nums; }
 
     /* Badges */
     .live-badge, .stale-badge { display: inline-flex; align-items: center; gap: 2px; padding: 0.15rem 0.4rem; border-radius: 6px; font-size: 0.75rem; font-weight: 700; }
-    .live-badge { background: rgba(61,220,151,0.12); color: var(--app-positive); }
-    .stale-badge { background: rgba(245,196,81,0.12); color: var(--app-warning); }
+    .live-badge { background: color-mix(in srgb, var(--app-positive) 12%, transparent); color: var(--app-positive); }
+    .stale-badge { background: color-mix(in srgb, var(--app-warning) 12%, transparent); color: var(--app-warning); }
     .badge-icon { font-size: 0.75rem !important; width: 0.75rem !important; height: 0.75rem !important; }
     .empty-row { padding: 2rem 1.25rem; text-align: center; }
 
     /* Skeleton */
     .skeleton-row { cursor: default; }
-    .skeleton-block { background: rgba(128,128,128,0.12); border-radius: 4px; animation: shimmer 1.5s infinite; }
-    @keyframes shimmer { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+    .skeleton-block {
+      border-radius: 4px;
+      background: linear-gradient(90deg, var(--app-surface-2) 25%, color-mix(in srgb, var(--app-primary) 8%, var(--app-surface-2)) 50%, var(--app-surface-2) 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.6s infinite;
+    }
+    @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
 
     /* Chart/detail */
     .chart-card { padding: 0; overflow: hidden; display: flex; flex-direction: column; }
@@ -225,7 +235,7 @@ import { MarketDataQuoteDto } from '../../core/models/api.models';
     .detail-symbol { font-size: 1.25rem; font-weight: 800; }
     .detail-price-block { text-align: right; }
     .detail-price { font-size: 1.4rem; font-weight: 800; font-variant-numeric: tabular-nums; }
-    .chart-area { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.75rem; min-height: 260px; background: linear-gradient(135deg, rgba(79,140,255,0.06), rgba(105,210,255,0.03)); padding: 2rem; text-align: center; }
+    .chart-area { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.75rem; min-height: 260px; background: linear-gradient(135deg, color-mix(in srgb, var(--app-primary) 6%, transparent), color-mix(in srgb, var(--app-accent) 3%, transparent)); padding: 2rem; text-align: center; }
     .chart-icon { font-size: 3rem; width: 3rem; height: 3rem; color: var(--app-primary); opacity: 0.4; }
     .chart-label { font-weight: 700; font-size: 1rem; }
     .chart-sublabel { font-size: 0.85rem; max-width: 360px; line-height: 1.5; }
@@ -235,7 +245,7 @@ import { MarketDataQuoteDto } from '../../core/models/api.models';
     @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
     /* Note */
-    .note-card { display: flex; align-items: flex-start; gap: 1rem; padding: 1rem 1.5rem; border-color: rgba(245,196,81,0.3) !important; }
+    .note-card { display: flex; align-items: flex-start; gap: 1rem; padding: 1rem 1.5rem; border-color: color-mix(in srgb, var(--app-warning) 30%, transparent) !important; }
     .note-icon { color: var(--app-warning); flex-shrink: 0; }
     .note-title { font-weight: 700; margin-bottom: 0.25rem; }
 
@@ -298,7 +308,8 @@ export class MarketDataComponent implements OnInit {
           this.error.set(err?.error?.message ?? err?.message ?? 'Failed to load quotes');
           this.loading.set(false);
           return of([] as MarketDataQuoteDto[]);
-        })
+        }),
+        takeUntilDestroyed(this.destroyRef)
       )
       .subscribe((data) => {
         if (data.length > 0 || !this.error()) {

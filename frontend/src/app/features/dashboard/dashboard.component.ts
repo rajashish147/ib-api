@@ -1,6 +1,5 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, inject, OnInit, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { CommonModule } from '@angular/common';
 import { ChartData } from 'chart.js';
 import { catchError, forkJoin, interval, Observable, of, retry, startWith, timer } from 'rxjs';
 import { MATERIAL_IMPORTS } from '../../shared/material.imports';
@@ -18,7 +17,7 @@ import type { StatCardState } from '../../shared/components/stat-card.component'
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule, ...MATERIAL_IMPORTS, StatCardComponent, ChartCardComponent, EmptyStateComponent],
+  imports: [...MATERIAL_IMPORTS, StatCardComponent, ChartCardComponent, EmptyStateComponent],
   template: `
     <section class="dashboard grid">
       <div class="stats-grid">
@@ -115,7 +114,7 @@ export class DashboardComponent implements OnInit {
       approvals: withRetry(this.approvalApi.getPendingApprovals()).pipe(catchError(() => { this.approvalsErrorSignal.set(true); return of([]); })),
       engine: withRetry(this.engineApi.getStatus()).pipe(catchError(() => { this.engineErrorSignal.set(true); return of({ status: 'error', message: '' }); })),
       health: withRetry(this.monitoringApi.getHealth()).pipe(catchError(() => of({ status: 'DOWN' })))
-    }).subscribe({
+    }).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (result) => {
         this.portfolioSignal.set(result.portfolio);
         this.snapshotsSignal.set(result.snapshots);

@@ -1,12 +1,11 @@
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
-import { CommonModule } from '@angular/common';
 import { ActivatedRoute } from '@angular/router';
 import { MATERIAL_IMPORTS } from '../../shared/material.imports';
 
 @Component({
   selector: 'app-placeholder',
   standalone: true,
-  imports: [CommonModule, ...MATERIAL_IMPORTS],
+  imports: [...MATERIAL_IMPORTS],
   template: `
     <section class="placeholder-page">
       <mat-card class="surface card placeholder-card">
