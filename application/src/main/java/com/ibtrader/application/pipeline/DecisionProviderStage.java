@@ -21,14 +21,21 @@ public class DecisionProviderStage implements PipelineStage {
     @Override
     public void execute(PipelineContext context) {
         for (TradingStrategy strategy : context.getEvaluationContexts().keySet()) {
-            EvaluationContext evalContext = context.getEvaluationContexts().get(strategy);
-            
-            List<TradeSignal> combinedSignals = new ArrayList<>();
-            // Assuming the registry has a method to evaluate all providers
-            // For now we will just accumulate signals
-            combinedSignals.addAll(registry.evaluateProviders(evalContext));
-            
-            context.getTradeSignals().put(strategy, combinedSignals);
+            try {
+                EvaluationContext evalContext = context.getEvaluationContexts().get(strategy);
+
+                List<TradeSignal> combinedSignals = new ArrayList<>();
+                // Assuming the registry has a method to evaluate all providers
+                // For now we will just accumulate signals
+                combinedSignals.addAll(registry.evaluateProviders(evalContext));
+
+                context.getTradeSignals().put(strategy, combinedSignals);
+            } catch (Exception e) {
+                // Isolate failures per-strategy so one bad decision provider doesn't
+                // abort signal generation for every other strategy in this cycle.
+                log.warn("Failed to evaluate decision providers for strategy {}: {}",
+                        strategy.getId(), e.getMessage(), e);
+            }
         }
     }
 

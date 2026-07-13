@@ -21,15 +21,21 @@ public class OrderPlanningStage implements PipelineStage {
     @Override
     public void execute(PipelineContext context) {
         for (TradingStrategy strategy : context.getEvaluationContexts().keySet()) {
-            EvaluationContext evalContext = context.getEvaluationContexts().get(strategy);
-            List<ValidatedTradeDecision> decisions = context.getDecisions().getOrDefault(strategy, List.of());
-            
-            if (decisions.isEmpty()) {
-                continue;
-            }
+            try {
+                EvaluationContext evalContext = context.getEvaluationContexts().get(strategy);
+                List<ValidatedTradeDecision> decisions = context.getDecisions().getOrDefault(strategy, List.of());
 
-            List<OrderPlan> plans = orderPlanningPort.planOrders(decisions, evalContext);
-            context.getOrderPlans().put(strategy, plans);
+                if (decisions.isEmpty()) {
+                    continue;
+                }
+
+                List<OrderPlan> plans = orderPlanningPort.planOrders(decisions, evalContext);
+                context.getOrderPlans().put(strategy, plans);
+            } catch (Exception e) {
+                // Isolate failures per-strategy so one bad decision doesn't abort order
+                // planning for every other strategy in this cycle.
+                log.warn("Failed to plan orders for strategy {}: {}", strategy.getId(), e.getMessage(), e);
+            }
         }
     }
 

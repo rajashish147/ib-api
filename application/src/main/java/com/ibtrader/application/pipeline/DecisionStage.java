@@ -21,15 +21,21 @@ public class DecisionStage implements PipelineStage {
     @Override
     public void execute(PipelineContext context) {
         for (TradingStrategy strategy : context.getEvaluationContexts().keySet()) {
-            EvaluationContext evalContext = context.getEvaluationContexts().get(strategy);
-            List<TradeSignal> signals = context.getTradeSignals().getOrDefault(strategy, List.of());
-            
-            if (signals.isEmpty()) {
-                continue;
-            }
+            try {
+                EvaluationContext evalContext = context.getEvaluationContexts().get(strategy);
+                List<TradeSignal> signals = context.getTradeSignals().getOrDefault(strategy, List.of());
 
-            List<ValidatedTradeDecision> decisions = decisionEnginePort.evaluateSignals(signals, evalContext);
-            context.getDecisions().put(strategy, decisions);
+                if (signals.isEmpty()) {
+                    continue;
+                }
+
+                List<ValidatedTradeDecision> decisions = decisionEnginePort.evaluateSignals(signals, evalContext);
+                context.getDecisions().put(strategy, decisions);
+            } catch (Exception e) {
+                // Isolate failures per-strategy so one bad signal doesn't abort decision
+                // evaluation for every other strategy in this cycle.
+                log.warn("Failed to evaluate decisions for strategy {}: {}", strategy.getId(), e.getMessage(), e);
+            }
         }
     }
 
