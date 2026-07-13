@@ -1,18 +1,14 @@
 package com.ibtrader.config;
 
-import com.ibtrader.domain.engine.CooldownValidator;
 import com.ibtrader.domain.engine.DefaultVariableRegistry;
 import com.ibtrader.domain.engine.VariableRegistry;
-import com.ibtrader.domain.model.strategy.EvaluationHistory;
 import com.ibtrader.domain.port.inbound.DecisionEnginePort;
 import com.ibtrader.domain.port.inbound.OrderPlanningPort;
 import com.ibtrader.domain.port.inbound.PortfolioAnalysisPort;
-import com.ibtrader.domain.port.inbound.RiskValidationPort;
 import com.ibtrader.domain.port.inbound.RuleEvaluationPort;
 import com.ibtrader.domain.port.inbound.provider.DecisionProvider;
 import com.ibtrader.domain.port.inbound.provider.DecisionProviderRegistry;
 import com.ibtrader.domain.port.outbound.AssetRepository;
-import com.ibtrader.domain.port.outbound.EvaluationHistoryRepository;
 import com.ibtrader.domain.port.outbound.ExecutionPolicyRepository;
 import com.ibtrader.domain.port.outbound.MarketDataCache;
 import com.ibtrader.strategy.engine.DecisionEngine;
@@ -64,23 +60,6 @@ public class DomainConfig {
             AssetRepository assetRepository,
             ExecutionPolicyRepository executionPolicyRepository) {
         return new OrderPlanningEngine(marketDataCache, assetRepository, executionPolicyRepository);
-    }
-
-    /**
-     * Risk validation port — passthrough implementation.
-     * Structural risk limits (position size, NLV stops, drawdown) are enforced by
-     * {@link com.ibtrader.application.service.RiskService} at pre-trade check time.
-     * Per-evaluation signal filtering can be added here when a full RiskEngine is wired.
-     */
-    @Bean
-    public RiskValidationPort riskValidationPort() {
-        return (decisions, context) -> decisions;
-    }
-
-    @Bean
-    public CooldownValidator cooldownValidator(
-            EvaluationHistoryRepository<EvaluationHistory> evaluationHistoryRepository) {
-        return new CooldownValidator(evaluationHistoryRepository);
     }
 
     /**
