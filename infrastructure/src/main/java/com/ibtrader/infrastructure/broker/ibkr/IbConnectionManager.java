@@ -232,6 +232,11 @@ public class IbConnectionManager {
 
     private void subscribeToMarketData() {
         try {
+            // Request delayed (free) market data — type 3 = 15-min delayed, works on paper accounts
+            // without live subscription. Switch to type 1 when live subscriptions are enabled.
+            client.requestMarketDataType(3);
+            log.info("Market data type set to DELAYED (type=3) for paper account");
+
             assetRepository.findAll().forEach(asset -> {
                 if (asset.isEnabled() && asset.isEquity()) {
                     int tickerId = nextTickerId.getAndIncrement();
@@ -244,6 +249,7 @@ public class IbConnectionManager {
             log.error("Failed to subscribe to market data", e);
         }
     }
+
 
     private void onTickPrice(int tickerId, double price) {
         UUID assetId = tickerAssetMap.get(tickerId);

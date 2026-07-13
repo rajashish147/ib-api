@@ -34,10 +34,11 @@ spring:
   jpa:
     hibernate:
       ddl-auto: validate            # Flyway owns schema; Hibernate must only validate
+    open-in-view: false             # Prevent DB queries during view rendering
     show-sql: false
     properties:
       hibernate:
-        dialect: org.hibernate.dialect.PostgreSQLDialect
+        # dialect is auto-detected — do NOT set explicitly (HHH90000025 warning)
         format_sql: true
         use_sql_comments: true
         jdbc:

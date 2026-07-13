@@ -21,11 +21,19 @@ import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+/**
+ * Seeds a default portfolio and test trading strategy when running in the {@code dev} profile.
+ * <p>
+ * Activate with: {@code --spring.profiles.active=dev}
+ * <p>
+ * This component must NOT run in production or the default profile.
+ */
 @Slf4j
 @Component
-@Profile("!test")
+@Profile("dev")
 @RequiredArgsConstructor
 public class TestStrategySeeder implements CommandLineRunner {
+
 
     private final AssetRepository assetRepository;
     private final PortfolioRepository portfolioRepository;

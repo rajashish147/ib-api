@@ -133,6 +133,21 @@ public class IbApiClient {
         return String.valueOf(version);
     }
 
+    /**
+     * Sets the market data type to request from IB.
+     * <ul>
+     *   <li>1 = Live (real-time)</li>
+     *   <li>2 = Frozen (last real-time value)</li>
+     *   <li>3 = Delayed (free 15-min delayed data — works without subscriptions)</li>
+     *   <li>4 = Delayed frozen</li>
+     * </ul>
+     * Must be called before {@link #requestMarketData} to take effect.
+     */
+    public void requestMarketDataType(int marketDataType) {
+        requireSocket();
+        invoke(socket, "reqMarketDataType", new Class<?>[] {int.class}, marketDataType);
+    }
+
     public void requestMarketData(int tickerId, String symbol, String exchange, String currency) {
         requireSocket();
         try {
@@ -145,7 +160,7 @@ public class IbApiClient {
 
             invoke(socket, "reqMktData",
                     new Class<?>[] {
-                        int.class, contractType, String.class, 
+                        int.class, contractType, String.class,
                         boolean.class, boolean.class, java.util.List.class
                     },
                     tickerId, contract, "", false, false, null);
@@ -155,6 +170,7 @@ public class IbApiClient {
             throw new IbConnectionException("Unable to request market data for " + symbol, exception);
         }
     }
+
 
     public void disconnect() {
         if (socket != null) {

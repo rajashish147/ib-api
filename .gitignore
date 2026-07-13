@@ -1,21 +1,23 @@
-# ── Build outputs ─────────────────────────────────────────────────────────────
-build/
-out/
-.gradle/
+# ── Maven build outputs ────────────────────────────────────────────────────────
+**/target/
+target/
+
+# ── Maven wrapper (check in mvnw, not the binary cache) ───────────────────────
+maven/
+maven.zip
+
+# ── IDE files ─────────────────────────────────────────────────────────────────
 .idea/
 *.iml
 *.ipr
 *.iws
+.vscode/
+*.swp
+*.swo
+*.orig
 
-# ── Gradle wrapper cache ───────────────────────────────────────────────────────
-.gradle/
-gradle/wrapper/gradle-wrapper.jar    # committed intentionally — not ignored
-
-# ── Spring Boot fat JAR ───────────────────────────────────────────────────────
-bootstrap/build/libs/*.jar
-
-# ── IBKR TWS API JAR (must be obtained from IBKR website, see libs/README.md) ─
-libs/TwsApi*.jar
+# ── Compiled class files ──────────────────────────────────────────────────────
+*.class
 
 # ── Secrets and environment files ─────────────────────────────────────────────
 .env
@@ -23,6 +25,10 @@ libs/TwsApi*.jar
 !.env.example
 **/application-local.yml
 **/application-secret.yml
+**/application-prod.yml
+
+# ── IBKR TWS API JAR (must be obtained from IBKR website, see libs/README.md) ─
+libs/TwsApi*.jar
 
 # ── Logs ──────────────────────────────────────────────────────────────────────
 logs/
@@ -34,27 +40,22 @@ logs/
 Thumbs.db
 desktop.ini
 
-# ── Test reports ──────────────────────────────────────────────────────────────
+# ── Test reports & coverage ───────────────────────────────────────────────────
 **/build/reports/
-
-# ── JaCoCo ────────────────────────────────────────────────────────────────────
 **/build/jacoco/
 **/build/jacocoHtml/
+**/build/tmp/
 
 # ── Docker volumes ────────────────────────────────────────────────────────────
 docker/volumes/
 docker/data/
 
-# ── Checkstyle cache ──────────────────────────────────────────────────────────
-**/build/tmp/
-
-# ── Miscellaneous ────────────────────────────────────────────────────────────
-*.class
+# ── Temp / scratch ────────────────────────────────────────────────────────────
 build-errors.txt
 RepairFlyway.*
+*.tmp
 
-target/
-maven/
-maven.zip
-
-**/target/
+# ── Node (frontend) ───────────────────────────────────────────────────────────
+frontend/node_modules/
+frontend/dist/
+frontend/.angular/
