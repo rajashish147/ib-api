@@ -76,7 +76,7 @@ public class RuleEvaluationEngine implements RuleEvaluationPort {
                 }
             }
             return true;
-        } else if (node.getOperator().equals("OR")) {
+        } else if ("LOGICAL_OR".equalsIgnoreCase(node.getNodeType()) || "OR".equalsIgnoreCase(node.getNodeType())) {
             boolean result = false;
             for (ExpressionNode child : node.getChildren()) {
                 if (evaluateNode(child, context)) {
