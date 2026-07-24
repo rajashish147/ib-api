@@ -10,13 +10,16 @@
 #   make clean    - clean all build outputs
 #   make frontend - start the Angular dev server
 #
-# On Windows use:  mvnw.cmd package ...
-# On Linux/Mac:    ./mvnw package ...
+# On Windows without GNU Make:  make.cmd build   (or .\make.ps1 build)
+# On Git Bash:                  ./make build
+# On Linux/Mac:                 make build
 # ══════════════════════════════════════════════════════════════════════════════
 
 # Detect OS
 ifeq ($(OS),Windows_NT)
   MVN := mvnw.cmd
+  SHELL := cmd.exe
+  .SHELLFLAGS := /c
 else
   MVN := ./mvnw
 endif
@@ -58,4 +61,7 @@ help:
 	@echo "  make test     - Run tests"
 	@echo "  make clean    - Clean build outputs"
 	@echo "  make frontend - Start Angular dev server"
+	@echo ""
+	@echo "Windows without GNU Make:  make.cmd build  (or .\\make.ps1 build)"
+	@echo "Git Bash:                  ./make build"
 	@echo ""
