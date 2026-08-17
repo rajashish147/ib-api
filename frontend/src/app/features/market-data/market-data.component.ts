@@ -7,17 +7,19 @@ import {
   signal,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { catchError, interval, of, startWith } from 'rxjs';
+import { DatePipe } from '@angular/common';
+import { interval, startWith } from 'rxjs';
 import { MATERIAL_IMPORTS } from '../../shared/material.imports';
 import { MarketDataApiService } from '../../core/services/market-data-api.service';
+import { AssetApiService } from '../../core/services/asset-api.service';
+import { NotificationService } from '../../core/services/notification.service';
 import { MarketDataQuoteDto } from '../../core/models/api.models';
 
 @Component({
   selector: 'app-market-data',
   standalone: true,
-  imports: [CommonModule, FormsModule, ...MATERIAL_IMPORTS],
+  imports: [FormsModule, DatePipe, ...MATERIAL_IMPORTS],
   template: `
     <section class="page grid">
 
@@ -26,25 +28,58 @@ import { MarketDataQuoteDto } from '../../core/models/api.models';
         <div class="header-info">
           <div class="page-title">Market Data</div>
           <div class="page-subtitle">
-            Live quotes from IB Gateway &bull; Auto-refreshes every 15s
+            Live quotes · Auto-refreshes every 15s
             @if (lastUpdated()) {
-              &bull; <span class="muted">Updated {{ lastUpdated() | date:'HH:mm:ss' }}</span>
+              · <span class="muted">Updated {{ lastUpdated() | date:'HH:mm:ss' }}</span>
             }
           </div>
         </div>
         <div class="header-actions">
-          <mat-form-field appearance="outline" class="search-field">
-            <mat-label>Search symbol</mat-label>
-            <mat-icon matPrefix>search</mat-icon>
-            <input matInput [(ngModel)]="query" placeholder="SPY" />
-          </mat-form-field>
-          <button mat-icon-button (click)="refresh()" matTooltip="Refresh quotes" aria-label="Refresh quotes" [disabled]="loading()">
+          <button mat-stroked-button (click)="showRegisterForm.set(!showRegisterForm())" >
+            <mat-icon>{{ showRegisterForm() ? 'close' : 'add' }}</mat-icon>
+            {{ showRegisterForm() ? 'Cancel' : 'Register Asset' }}
+          </button>
+          <button mat-icon-button (click)="refresh()" matTooltip="Refresh" [disabled]="loading()">
             <mat-icon [class.spinning]="loading()">refresh</mat-icon>
           </button>
         </div>
       </mat-card>
 
-      <!-- Error state -->
+      <!-- Inline register asset form -->
+      @if (showRegisterForm()) {
+        <mat-card class="surface card form-card">
+          <div class="form-title">Register Asset</div>
+          <div class="form-row">
+            <mat-form-field appearance="outline">
+              <mat-label>Symbol *</mat-label>
+              <input matInput [(ngModel)]="regSymbol" placeholder="AAPL" style="text-transform:uppercase" />
+            </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>Exchange</mat-label>
+              <input matInput [(ngModel)]="regExchange" placeholder="SMART" />
+            </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>Currency</mat-label>
+              <input matInput [(ngModel)]="regCurrency" placeholder="USD" />
+            </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>Asset Class</mat-label>
+              <mat-select [(ngModel)]="regAssetClass">
+                <mat-option value="STOCK">STOCK</mat-option>
+                <mat-option value="ETF">ETF</mat-option>
+                <mat-option value="FUTURE">FUTURE</mat-option>
+                <mat-option value="CRYPTO">CRYPTO</mat-option>
+              </mat-select>
+            </mat-form-field>
+            <button mat-flat-button color="primary" [disabled]="!regSymbol || registering()" (click)="registerAsset()">
+              <mat-icon>save</mat-icon>
+              {{ registering() ? 'Registering…' : 'Register' }}
+            </button>
+          </div>
+        </mat-card>
+      }
+
+      <!-- Error -->
       @if (error()) {
         <mat-card class="surface card error-card">
           <mat-icon class="error-icon">cloud_off</mat-icon>
@@ -55,130 +90,60 @@ import { MarketDataQuoteDto } from '../../core/models/api.models';
         </mat-card>
       }
 
-      <div class="market-grid">
-        <!-- Watchlist -->
-        <mat-card class="surface card list-card">
-          <div class="section-header">
-            <div class="section-title">Watchlist</div>
-            <span class="muted">{{ filteredQuotes().length }} symbols</span>
-          </div>
-
-          <div class="watch-table-header">
-            <span>Symbol</span>
-            <span class="align-right">Last Price</span>
-            <span class="align-right">Status</span>
-          </div>
-
-          @if (loading() && quotes().length === 0) {
-            @for (i of [1,2,3,4,5]; track i) {
-              <div class="watch-row skeleton-row">
-                <div class="skeleton-block" style="width:80px;height:14px"></div>
-                <div class="skeleton-block align-right" style="width:60px;height:14px"></div>
-                <div class="skeleton-block align-right" style="width:50px;height:14px"></div>
-              </div>
-            }
-          }
-
-          @for (item of filteredQuotes(); track item.assetId) {
-            <div class="watch-row" role="button" tabindex="0"
-                 [attr.aria-pressed]="selectedSymbol() === item.symbol"
-                 [class.selected]="selectedSymbol() === item.symbol"
-                 (click)="selectSymbol(item)"
-                 (keydown.enter)="selectSymbol(item)"
-                 (keydown.space)="$event.preventDefault(); selectSymbol(item)">
-              <div>
-                <strong>{{ item.symbol }}</strong>
-                <div class="muted small">
-                  {{ item.exchange ?? 'SMART' }}
-                  @if (item.assetClass) { &bull; {{ item.assetClass }} }
-                </div>
-              </div>
-              <div class="align-right price-col">
-                @if (item.lastPrice != null) {
-                  {{ item.lastPrice | currency:'USD':'symbol':'1.2-4' }}
-                } @else {
-                  <span class="muted">—</span>
-                }
-              </div>
-              <div class="align-right">
-                @if (item.stale) {
-                  <span class="stale-badge" matTooltip="No live price received yet">
-                    <mat-icon class="badge-icon">schedule</mat-icon>Waiting
-                  </span>
-                } @else {
-                  <span class="live-badge">
-                    <mat-icon class="badge-icon">fiber_manual_record</mat-icon>Live
-                  </span>
-                }
-              </div>
-            </div>
-          }
-
-          @if (!loading() && filteredQuotes().length === 0 && !error()) {
-            <div class="empty-row muted">
-              @if (query) {
-                No symbols match "{{ query }}"
-              } @else {
-                No assets registered. Check application.yml assets section.
-              }
-            </div>
-          }
-        </mat-card>
-
-        <!-- Selected symbol detail / chart placeholder -->
-        <mat-card class="surface card chart-card">
-          @if (selectedQuote(); as q) {
-            <div class="detail-header">
-              <div>
-                <div class="detail-symbol">{{ q.symbol }}</div>
-                <div class="muted small">{{ q.exchange ?? 'SMART' }} &bull; {{ q.assetClass ?? 'EQUITY' }} &bull; {{ q.currency ?? 'USD' }}</div>
-              </div>
-              <div class="detail-price-block">
-                @if (q.lastPrice != null) {
-                  <div class="detail-price">{{ q.lastPrice | currency:'USD':'symbol':'1.2-4' }}</div>
-                  <div class="muted small">{{ q.priceAt | date:'HH:mm:ss' }}</div>
-                } @else {
-                  <div class="detail-price muted">No price</div>
-                }
-              </div>
-            </div>
-            <div class="section-header" style="border-top: 1px solid var(--app-border);">
-              <div class="section-title">Historical Prices</div>
-              <span class="muted">Coming soon</span>
-            </div>
-          } @else {
-            <div class="section-header">
-              <div class="section-title">Historical Prices</div>
-              <span class="muted">Select a symbol</span>
-            </div>
-          }
-          <div class="chart-area">
-            <mat-icon class="chart-icon">show_chart</mat-icon>
-            <div class="chart-label">
-              @if (selectedSymbol()) {
-                {{ selectedSymbol() }} — Historical chart
-              } @else {
-                Select a symbol from the watchlist
-              }
-            </div>
-            <div class="chart-sublabel muted">
-              Historical price charts (IBKR reqHistoricalData) are planned for a future update.
-            </div>
-          </div>
-        </mat-card>
-      </div>
-
-      <!-- Delayed data notice -->
-      <mat-card class="surface card note-card">
-        <mat-icon class="note-icon">info_outline</mat-icon>
-        <div>
-          <div class="note-title">Paper account — delayed data</div>
-          <div class="muted">
-            Prices on paper-trading accounts are delayed 15–20 minutes (IBKR code 10089).
-            Prices update as IB sends tick callbacks after market open. During pre-market or after-hours,
-            prices show the last received tick.
-          </div>
+      <!-- Quotes table -->
+      <mat-card class="surface card table-card">
+        <div class="table-header">
+          <div class="section-title">Quotes</div>
+          <span class="muted">{{ filteredQuotes().length }} symbols</span>
+          <mat-form-field appearance="outline" class="search-field">
+            <mat-label>Filter</mat-label>
+            <mat-icon matPrefix>search</mat-icon>
+            <input matInput [(ngModel)]="query" placeholder="SPY" />
+          </mat-form-field>
         </div>
+        <div class="table-wrap">
+          <table mat-table [dataSource]="filteredQuotes()">
+            <ng-container matColumnDef="symbol">
+              <th mat-header-cell *matHeaderCellDef>Symbol</th>
+              <td mat-cell *matCellDef="let q"><strong>{{ q.symbol }}</strong></td>
+            </ng-container>
+            <ng-container matColumnDef="assetClass">
+              <th mat-header-cell *matHeaderCellDef>Asset Class</th>
+              <td mat-cell *matCellDef="let q" class="muted">{{ q.assetClass ?? '—' }}</td>
+            </ng-container>
+            <ng-container matColumnDef="exchange">
+              <th mat-header-cell *matHeaderCellDef>Exchange</th>
+              <td mat-cell *matCellDef="let q" class="muted">{{ q.exchange ?? 'SMART' }}</td>
+            </ng-container>
+            <ng-container matColumnDef="lastPrice">
+              <th mat-header-cell *matHeaderCellDef>Last Price</th>
+              <td mat-cell *matCellDef="let q" class="price-cell">
+                {{ q.lastPrice != null ? '$' + q.lastPrice.toFixed(2) : '—' }}
+              </td>
+            </ng-container>
+            <ng-container matColumnDef="stale">
+              <th mat-header-cell *matHeaderCellDef>Stale?</th>
+              <td mat-cell *matCellDef="let q">
+                @if (q.stale) {
+                  <span class="stale-badge"><mat-icon class="badge-icon">schedule</mat-icon>Stale</span>
+                } @else {
+                  <span class="live-badge"><mat-icon class="badge-icon">fiber_manual_record</mat-icon>Live</span>
+                }
+              </td>
+            </ng-container>
+            <ng-container matColumnDef="priceAt">
+              <th mat-header-cell *matHeaderCellDef>Last Updated</th>
+              <td mat-cell *matCellDef="let q" class="muted">{{ q.priceAt ? (q.priceAt | date:'HH:mm:ss') : '—' }}</td>
+            </ng-container>
+            <tr mat-header-row *matHeaderRowDef="cols"></tr>
+            <tr mat-row *matRowDef="let row; columns: cols"></tr>
+          </table>
+        </div>
+        @if (!loading() && filteredQuotes().length === 0 && !error()) {
+          <div class="empty-row muted">
+            @if (query) { No symbols match "{{ query }}" } @else { No assets registered. }
+          </div>
+        }
       </mat-card>
     </section>
   `,
@@ -186,104 +151,63 @@ import { MarketDataQuoteDto } from '../../core/models/api.models';
     .page { gap: 1rem; }
     .header-card { display: flex; justify-content: space-between; align-items: center; gap: 1.5rem; padding: 1.25rem 1.5rem; flex-wrap: wrap; }
     .header-info { flex: 1; min-width: 200px; }
-    .header-actions { display: flex; align-items: center; gap: 0.5rem; }
     .page-title { font-size: 1.25rem; font-weight: 800; }
     .page-subtitle { color: var(--app-text-muted); margin-top: 0.25rem; font-size: 0.9rem; }
-    .search-field { width: 200px; }
+    .header-actions { display: flex; align-items: center; gap: 0.5rem; }
     .muted { color: var(--app-text-muted); }
-    .small { font-size: 0.82rem; }
-    .market-grid { display: grid; grid-template-columns: 1fr 1.4fr; gap: 1rem; }
-
-    /* Error card */
-    .error-card { display: flex; align-items: center; gap: 1rem; padding: 1rem 1.5rem; border-color: color-mix(in srgb, var(--app-negative) 30%, transparent) !important; }
-    .error-icon { color: var(--app-negative); font-size: 2rem; width: 2rem; height: 2rem; }
-    .error-title { font-weight: 700; margin-bottom: 0.25rem; }
-
-    /* Watchlist */
-    .list-card { padding: 0; overflow: hidden; }
-    .section-header { display: flex; justify-content: space-between; align-items: center; padding: 1rem 1.25rem 0.75rem; border-bottom: 1px solid var(--app-border); }
+    .error-card { display: flex; align-items: center; gap: 1rem; padding: 1rem 1.5rem; }
+    .error-icon { color: #ef4444; }
+    .error-title { font-weight: 700; color: #ef4444; }
+    .form-card { padding: 1.25rem 1.5rem; }
+    .form-title { font-weight: 700; margin-bottom: 1rem; }
+    .form-row { display: flex; gap: 1rem; flex-wrap: wrap; align-items: center; }
+    .form-row mat-form-field { flex: 1; min-width: 150px; }
+    .table-card { padding: 0; overflow: hidden; }
+    .table-header { display: flex; align-items: center; gap: 1rem; padding: 1rem 1.25rem 0.75rem; border-bottom: 1px solid var(--app-border); flex-wrap: wrap; }
     .section-title { font-weight: 700; }
-    .watch-table-header { display: grid; grid-template-columns: 1fr auto auto; gap: 1rem; padding: 0.5rem 1.25rem; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--app-text-muted); border-bottom: 1px solid var(--app-border); }
-    .watch-row { display: grid; grid-template-columns: 1fr auto auto; gap: 1rem; padding: 0.85rem 1.25rem; border-bottom: 1px solid var(--app-border); align-items: center; transition: background 0.15s; cursor: pointer; }
-    .watch-row:last-child { border-bottom: 0; }
-    .watch-row:hover { background: color-mix(in srgb, var(--app-primary) 5%, transparent); }
-    .watch-row.selected { background: color-mix(in srgb, var(--app-primary) 8%, transparent); }
-    .watch-row:focus-visible { outline: 2px solid var(--app-primary); outline-offset: -2px; }
-    .align-right { text-align: right; }
-    .price-col { font-weight: 600; font-variant-numeric: tabular-nums; }
-
-    /* Badges */
+    .search-field { margin-left: auto; width: 180px; }
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; }
+    .price-cell { font-weight: 600; font-variant-numeric: tabular-nums; }
     .live-badge, .stale-badge { display: inline-flex; align-items: center; gap: 2px; padding: 0.15rem 0.4rem; border-radius: 6px; font-size: 0.75rem; font-weight: 700; }
-    .live-badge { background: color-mix(in srgb, var(--app-positive) 12%, transparent); color: var(--app-positive); }
-    .stale-badge { background: color-mix(in srgb, var(--app-warning) 12%, transparent); color: var(--app-warning); }
+    .live-badge { background: color-mix(in srgb, #22c55e 12%, transparent); color: #22c55e; }
+    .stale-badge { background: color-mix(in srgb, #f59e0b 12%, transparent); color: #f59e0b; }
     .badge-icon { font-size: 0.75rem !important; width: 0.75rem !important; height: 0.75rem !important; }
-    .empty-row { padding: 2rem 1.25rem; text-align: center; }
-
-    /* Skeleton */
-    .skeleton-row { cursor: default; }
-    .skeleton-block {
-      border-radius: 4px;
-      background: linear-gradient(90deg, var(--app-surface-2) 25%, color-mix(in srgb, var(--app-primary) 8%, var(--app-surface-2)) 50%, var(--app-surface-2) 75%);
-      background-size: 200% 100%;
-      animation: shimmer 1.6s infinite;
-    }
-    @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
-
-    /* Chart/detail */
-    .chart-card { padding: 0; overflow: hidden; display: flex; flex-direction: column; }
-    .detail-header { display: flex; justify-content: space-between; align-items: flex-start; padding: 1rem 1.25rem 0.75rem; }
-    .detail-symbol { font-size: 1.25rem; font-weight: 800; }
-    .detail-price-block { text-align: right; }
-    .detail-price { font-size: 1.4rem; font-weight: 800; font-variant-numeric: tabular-nums; }
-    .chart-area { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.75rem; min-height: 260px; background: linear-gradient(135deg, color-mix(in srgb, var(--app-primary) 6%, transparent), color-mix(in srgb, var(--app-accent) 3%, transparent)); padding: 2rem; text-align: center; }
-    .chart-icon { font-size: 3rem; width: 3rem; height: 3rem; color: var(--app-primary); opacity: 0.4; }
-    .chart-label { font-weight: 700; font-size: 1rem; }
-    .chart-sublabel { font-size: 0.85rem; max-width: 360px; line-height: 1.5; }
-
-    /* Refresh spinning */
+    .empty-row { padding: 2rem; text-align: center; }
     .spinning { animation: spin 1s linear infinite; }
     @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-
-    /* Note */
-    .note-card { display: flex; align-items: flex-start; gap: 1rem; padding: 1rem 1.5rem; border-color: color-mix(in srgb, var(--app-warning) 30%, transparent) !important; }
-    .note-icon { color: var(--app-warning); flex-shrink: 0; }
-    .note-title { font-weight: 700; margin-bottom: 0.25rem; }
-
-    @media (max-width: 900px) {
-      .market-grid { grid-template-columns: 1fr; }
-      .header-card { flex-direction: column; align-items: start; }
-      .search-field { width: 100%; }
-    }
+    @media (max-width: 900px) { .header-card { flex-direction: column; align-items: start; } .search-field { width: 100%; margin-left: 0; } }
   `],
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class MarketDataComponent implements OnInit {
   private readonly marketDataApi = inject(MarketDataApiService);
-  private readonly destroyRef    = inject(DestroyRef);
+  private readonly assetApi = inject(AssetApiService);
+  private readonly notify = inject(NotificationService);
+  private readonly destroyRef = inject(DestroyRef);
 
-  readonly quotes         = signal<readonly MarketDataQuoteDto[]>([]);
-  readonly loading        = signal(true);
-  readonly error          = signal<string | null>(null);
-  readonly lastUpdated    = signal<Date | null>(null);
-  readonly selectedSymbol = signal<string | null>(null);
+  readonly cols = ['symbol', 'assetClass', 'exchange', 'lastPrice', 'stale', 'priceAt'] as const;
+
+  readonly quotes = signal<readonly MarketDataQuoteDto[]>([]);
+  readonly loading = signal(true);
+  readonly error = signal<string | null>(null);
+  readonly lastUpdated = signal<Date | null>(null);
+  readonly showRegisterForm = signal(false);
+  readonly registering = signal(false);
 
   query = '';
+  regSymbol = '';
+  regExchange = 'SMART';
+  regCurrency = 'USD';
+  regAssetClass = 'STOCK';
 
   filteredQuotes(): readonly MarketDataQuoteDto[] {
     const q = this.query.trim().toUpperCase();
     if (!q) return this.quotes();
-    return this.quotes().filter(
-      (item) => item.symbol.includes(q) || (item.assetClass ?? '').toUpperCase().includes(q)
-    );
-  }
-
-  selectedQuote(): MarketDataQuoteDto | undefined {
-    const sym = this.selectedSymbol();
-    return sym ? this.quotes().find((q) => q.symbol === sym) : undefined;
+    return this.quotes().filter(item => item.symbol.includes(q) || (item.assetClass ?? '').toUpperCase().includes(q));
   }
 
   ngOnInit(): void {
-    // Auto-refresh every 15 seconds; fires immediately on load (startWith)
     interval(15_000)
       .pipe(startWith(0), takeUntilDestroyed(this.destroyRef))
       .subscribe(() => this.load());
@@ -293,31 +217,44 @@ export class MarketDataComponent implements OnInit {
     this.load();
   }
 
-  selectSymbol(item: MarketDataQuoteDto): void {
-    this.selectedSymbol.set(
-      this.selectedSymbol() === item.symbol ? null : item.symbol
-    );
+  registerAsset(): void {
+    if (!this.regSymbol) return;
+    this.registering.set(true);
+    this.assetApi.registerAsset({
+      symbol: this.regSymbol.toUpperCase(),
+      exchange: this.regExchange || null,
+      currency: this.regCurrency || null,
+      assetClass: this.regAssetClass || null
+    }).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: () => {
+        this.notify.success(`Asset ${this.regSymbol.toUpperCase()} registered`);
+        this.regSymbol = '';
+        this.showRegisterForm.set(false);
+        this.registering.set(false);
+        this.load();
+      },
+      error: (err) => {
+        this.notify.error(err?.error?.message ?? 'Registration failed');
+        this.registering.set(false);
+      }
+    });
   }
 
   private load(): void {
     this.loading.set(true);
-    this.marketDataApi
-      .getQuotes()
-      .pipe(
-        catchError((err) => {
-          this.error.set(err?.error?.message ?? err?.message ?? 'Failed to load quotes');
-          this.loading.set(false);
-          return of([] as MarketDataQuoteDto[]);
-        }),
-        takeUntilDestroyed(this.destroyRef)
-      )
-      .subscribe((data) => {
-        if (data.length > 0 || !this.error()) {
+    this.marketDataApi.getQuotes()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (data) => {
           this.quotes.set(data);
           this.error.set(null);
           this.lastUpdated.set(new Date());
+          this.loading.set(false);
+        },
+        error: (err) => {
+          this.error.set(err?.error?.message ?? err?.message ?? 'Failed to load quotes');
+          this.loading.set(false);
         }
-        this.loading.set(false);
       });
   }
 }

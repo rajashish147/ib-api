@@ -1,224 +1,245 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, inject, OnInit, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  DestroyRef,
+  inject,
+  OnInit,
+  signal,
+} from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { ChartData } from 'chart.js';
-import { catchError, forkJoin, interval, Observable, of, retry, startWith, timer } from 'rxjs';
+import { interval, startWith } from 'rxjs';
 import { MATERIAL_IMPORTS } from '../../shared/material.imports';
-import { StatCardComponent } from '../../shared/components/stat-card.component';
-import { ChartCardComponent } from '../../shared/components/chart-card.component';
-import { EmptyStateComponent } from '../../shared/components/empty-state.component';
-import { EngineApiService } from '../../core/services/engine-api.service';
-import { MonitoringApiService } from '../../core/services/monitoring-api.service';
 import { PortfolioApiService } from '../../core/services/portfolio-api.service';
+import { EngineApiService } from '../../core/services/engine-api.service';
 import { StrategyApiService } from '../../core/services/strategy-api.service';
-import { ApprovalApiService } from '../../core/services/approval-api.service';
-import { PortfolioDto, PortfolioSnapshotDto } from '../../core/models/api.models';
-import type { StatCardState } from '../../shared/components/stat-card.component';
+import { NotificationService } from '../../core/services/notification.service';
+import { PortfolioDto, EngineStatusDto, StrategyDto } from '../../core/models/api.models';
 
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [...MATERIAL_IMPORTS, StatCardComponent, ChartCardComponent, EmptyStateComponent],
+  imports: [...MATERIAL_IMPORTS],
   template: `
     <section class="dashboard grid">
+
+      <!-- Stat cards -->
       <div class="stats-grid">
-        <app-stat-card label="Portfolio Value" [value]="portfolioValue()" [trend]="portfolioTrend()" icon="account_balance_wallet" [state]="portfolioState()"></app-stat-card>
-        <app-stat-card label="Cash Balance" [value]="cashBalance()" trend="Available now" icon="savings" [state]="portfolioState()"></app-stat-card>
-        <app-stat-card label="Buying Power" [value]="buyingPower()" trend="Margin aware" icon="trending_up" [state]="portfolioState()"></app-stat-card>
-        <app-stat-card label="Today's PnL" [value]="todayPnl()" [trend]="todayPnlTrend()" icon="query_stats" [state]="portfolioState()"></app-stat-card>
-        <app-stat-card label="Pending Approvals" [value]="pendingApprovals()" trend="Manual review queue" icon="receipt_long" [state]="approvalsState()"></app-stat-card>
-        <app-stat-card label="Connection Status" [value]="connectionStatus()" trend="REST-backed" icon="cloud_done" [state]="engineState()"></app-stat-card>
+        <mat-card class="surface card stat-card">
+          <div class="stat-label">Net Liquidation Value</div>
+          <div class="stat-value">{{ nlv() }}</div>
+        </mat-card>
+        <mat-card class="surface card stat-card">
+          <div class="stat-label">Cash</div>
+          <div class="stat-value">{{ cash() }}</div>
+        </mat-card>
+        <mat-card class="surface card stat-card">
+          <div class="stat-label">Buying Power</div>
+          <div class="stat-value">{{ buyingPower() }}</div>
+        </mat-card>
+        <mat-card class="surface card stat-card">
+          <div class="stat-label">Unrealized P&amp;L</div>
+          <div class="stat-value" [class.positive]="pnlPositive()" [class.negative]="!pnlPositive()">{{ unrealizedPnl() }}</div>
+        </mat-card>
       </div>
 
-      @if (loaded()) {
-        <div class="charts-grid">
-          <app-chart-card title="Portfolio Allocation" subtitle="By open positions" chartType="doughnut" [chartData]="allocationChart()" [error]="portfolioError()"></app-chart-card>
-          <app-chart-card title="Daily PnL" subtitle="Snapshot series from portfolio history" chartType="line" [chartData]="pnlChart()" [error]="portfolioError()"></app-chart-card>
-          <app-chart-card title="Asset Allocation" subtitle="Current weights" chartType="bar" [chartData]="assetChart()" [error]="portfolioError()"></app-chart-card>
+      <!-- Engine status -->
+      <mat-card class="surface card engine-card">
+        <div class="engine-header">
+          <div class="section-title">Engine</div>
+          @if (engineStatus()) {
+            <span class="status-badge" [class.running]="engineStatus()!.status === 'RUNNING'" [class.paused]="engineStatus()!.status !== 'RUNNING'">
+              <mat-icon class="badge-icon">{{ engineStatus()!.status === 'RUNNING' ? 'play_circle' : 'pause_circle' }}</mat-icon>
+              {{ engineStatus()!.status }}
+            </span>
+          }
         </div>
+        <div class="engine-actions">
+          <button mat-stroked-button (click)="triggerPipeline()" [disabled]="engineBusy()">
+            <mat-icon>bolt</mat-icon> Trigger
+          </button>
+          <button mat-stroked-button (click)="pauseEngine()" [disabled]="engineBusy() || engineStatus()?.status !== 'RUNNING'">
+            <mat-icon>pause</mat-icon> Pause
+          </button>
+          <button mat-stroked-button (click)="resumeEngine()" [disabled]="engineBusy() || engineStatus()?.status === 'RUNNING'">
+            <mat-icon>play_arrow</mat-icon> Resume
+          </button>
+        </div>
+      </mat-card>
 
-        <mat-card class="surface card timeline-card">
-          <div class="section-header">
-            <div>
-              <div class="section-title">Recent Activity</div>
-              <div class="section-subtitle">Latest portfolio, strategy, and engine activity</div>
-            </div>
-          </div>
-          <mat-list>
-            @for (item of activityTimeline(); track item.label) {
-              <mat-list-item>
-                <mat-icon matListItemIcon>{{ item.icon }}</mat-icon>
-                <div matListItemTitle>{{ item.label }}</div>
-                <div matListItemLine>{{ item.detail }}</div>
-              </mat-list-item>
-            }
-          </mat-list>
-        </mat-card>
-      } @else {
-        <app-empty-state icon="analytics" title="Loading dashboard" message="Fetching portfolio, strategy, and monitoring data from the REST API."></app-empty-state>
+      <!-- Loading / error -->
+      @if (loading()) {
+        <div class="spinner-row">
+          <mat-spinner diameter="32"></mat-spinner>
+          <span class="muted">Loading dashboard…</span>
+        </div>
       }
+      @if (error()) {
+        <mat-card class="surface card error-card">
+          <mat-icon class="error-icon">error_outline</mat-icon>
+          <div>
+            <div class="error-title">Failed to load data</div>
+            <div class="muted">Check backend connectivity and try refreshing.</div>
+          </div>
+          <button mat-stroked-button (click)="loadAll()">Retry</button>
+        </mat-card>
+      }
+
+      <!-- Strategies table -->
+      <mat-card class="surface card table-card">
+        <div class="section-header">
+          <div class="section-title">Active Strategies</div>
+          <span class="muted">{{ strategies().length }} total</span>
+        </div>
+        <div class="table-wrap">
+          <table mat-table [dataSource]="strategies()">
+            <ng-container matColumnDef="name">
+              <th mat-header-cell *matHeaderCellDef>Name</th>
+              <td mat-cell *matCellDef="let s">
+                <strong>{{ s.name }}</strong>
+              </td>
+            </ng-container>
+            <ng-container matColumnDef="buy">
+              <th mat-header-cell *matHeaderCellDef>Buy $</th>
+              <td mat-cell *matCellDef="let s">{{ s.buyThreshold ?? '—' }}</td>
+            </ng-container>
+            <ng-container matColumnDef="sell">
+              <th mat-header-cell *matHeaderCellDef>Sell $</th>
+              <td mat-cell *matCellDef="let s">{{ s.sellThreshold ?? '—' }}</td>
+            </ng-container>
+            <ng-container matColumnDef="enabled">
+              <th mat-header-cell *matHeaderCellDef>Enabled</th>
+              <td mat-cell *matCellDef="let s">
+                <span class="status-dot" [class.enabled]="s.enabled" [class.disabled]="!s.enabled"></span>
+                {{ s.enabled ? 'Yes' : 'No' }}
+              </td>
+            </ng-container>
+            <tr mat-header-row *matHeaderRowDef="stratCols"></tr>
+            <tr mat-row *matRowDef="let row; columns: stratCols"></tr>
+          </table>
+          @if (!loading() && strategies().length === 0) {
+            <div class="empty-row muted">No strategies configured.</div>
+          }
+        </div>
+      </mat-card>
     </section>
   `,
   styles: [`
     .dashboard { gap: 1rem; }
-    .stats-grid, .charts-grid { display: grid; gap: 1rem; }
-    .stats-grid { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
-    .charts-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-    .timeline-card { padding: 1rem; }
-    .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; }
-    .section-title { font-size: 1rem; font-weight: 700; }
-    .section-subtitle { color: var(--app-text-muted); font-size: 0.88rem; }
-    @media (max-width: 1400px) { .charts-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-    @media (max-width: 900px) { .charts-grid { grid-template-columns: 1fr; } }
+    .stats-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1rem; }
+    .stat-card { padding: 1.25rem 1.5rem; }
+    .stat-label { font-size: 0.85rem; color: var(--app-text-muted); margin-bottom: 0.4rem; }
+    .stat-value { font-size: 1.25rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+    .positive { color: #22c55e; }
+    .negative { color: #ef4444; }
+    .engine-card { padding: 1.25rem 1.5rem; display: flex; flex-direction: column; gap: 1rem; }
+    .engine-header { display: flex; align-items: center; gap: 1rem; }
+    .engine-actions { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+    .section-title { font-weight: 700; font-size: 1rem; }
+    .section-header { display: flex; justify-content: space-between; align-items: center; padding: 1rem 1.25rem 0.75rem; border-bottom: 1px solid var(--app-border); }
+    .status-badge { display: inline-flex; align-items: center; gap: 4px; padding: 0.2rem 0.65rem; border-radius: 999px; font-size: 0.75rem; font-weight: 700; }
+    .status-badge.running { background: color-mix(in srgb, #22c55e 15%, transparent); color: #22c55e; }
+    .status-badge.paused { background: color-mix(in srgb, #f59e0b 15%, transparent); color: #f59e0b; }
+    .badge-icon { font-size: 0.85rem !important; width: 0.85rem !important; height: 0.85rem !important; }
+    .muted { color: var(--app-text-muted); font-size: 0.9rem; }
+    .spinner-row { display: flex; align-items: center; gap: 1rem; padding: 1rem; }
+    .error-card { display: flex; align-items: center; gap: 1rem; padding: 1rem 1.5rem; }
+    .error-icon { color: #ef4444; }
+    .error-title { font-weight: 700; color: #ef4444; }
+    .table-card { padding: 0; overflow: hidden; }
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; }
+    .empty-row { padding: 2rem; text-align: center; }
+    .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+    .status-dot.enabled { background: #22c55e; }
+    .status-dot.disabled { background: var(--app-text-muted); }
+    @media (max-width: 1100px) { .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    @media (max-width: 600px) { .stats-grid { grid-template-columns: 1fr; } }
   `],
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class DashboardComponent implements OnInit {
-  private readonly portfolioApi  = inject(PortfolioApiService);
-  private readonly strategyApi   = inject(StrategyApiService);
-  private readonly approvalApi   = inject(ApprovalApiService);
-  private readonly engineApi     = inject(EngineApiService);
-  private readonly monitoringApi = inject(MonitoringApiService);
-  private readonly destroyRef    = inject(DestroyRef);
+  private readonly portfolioApi = inject(PortfolioApiService);
+  private readonly engineApi = inject(EngineApiService);
+  private readonly strategyApi = inject(StrategyApiService);
+  private readonly notify = inject(NotificationService);
+  private readonly destroyRef = inject(DestroyRef);
 
-  private readonly portfolioSignal = signal<PortfolioDto | null>(null);
-  private readonly snapshotsSignal = signal<readonly PortfolioSnapshotDto[]>([]);
-  private readonly loadedSignal = signal(false);
-  private readonly pendingApprovalsSignal = signal(0);
-  private readonly engineStatusSignal = signal('unknown');
+  readonly stratCols = ['name', 'buy', 'sell', 'enabled'] as const;
 
-  private readonly portfolioErrorSignal = signal(false);
-  private readonly approvalsErrorSignal = signal(false);
-  private readonly engineErrorSignal = signal(false);
+  readonly portfolio = signal<PortfolioDto | null>(null);
+  readonly engineStatus = signal<EngineStatusDto | null>(null);
+  readonly strategies = signal<readonly StrategyDto[]>([]);
+  readonly loading = signal(true);
+  readonly error = signal(false);
+  readonly engineBusy = signal(false);
 
-  readonly lastUpdated = signal<Date | null>(null);
-
-  readonly loaded = this.loadedSignal.asReadonly();
-  readonly portfolioError = this.portfolioErrorSignal.asReadonly();
+  readonly nlv = () => this.formatMoney(this.portfolio()?.netLiquidationValue);
+  readonly cash = () => this.formatMoney(this.portfolio()?.totalCashValue);
+  readonly buyingPower = () => this.formatMoney(this.portfolio()?.buyingPower);
+  readonly unrealizedPnl = () => this.formatMoney(this.portfolio()?.unrealizedPnL);
+  readonly pnlPositive = () => Number(this.portfolio()?.unrealizedPnL?.amount ?? 0) >= 0;
 
   ngOnInit(): void {
-    // Auto-refresh every 30s; startWith(0) fires immediately on first load
     interval(30_000)
       .pipe(startWith(0), takeUntilDestroyed(this.destroyRef))
       .subscribe(() => this.loadAll());
   }
 
-  private loadAll(): void {
-    // retryWhen: up to 3 attempts with 2s gap — gives backend time to warm up
-    const withRetry = <T>(obs: Observable<T>) =>
-      obs.pipe(retry({ count: 3, delay: (_, n) => timer(n * 2000) }));
+  loadAll(): void {
+    this.loading.set(true);
+    this.error.set(false);
 
-    forkJoin({
-      portfolio: withRetry(this.portfolioApi.getPortfolio()).pipe(catchError(() => { this.portfolioErrorSignal.set(true); return of(null); })),
-      snapshots: withRetry(this.portfolioApi.getSnapshots(24)).pipe(catchError(() => of([] as PortfolioSnapshotDto[]))),
-      strategies: withRetry(this.strategyApi.getActiveStrategies()).pipe(catchError(() => of([]))),
-      approvals: withRetry(this.approvalApi.getPendingApprovals()).pipe(catchError(() => { this.approvalsErrorSignal.set(true); return of([]); })),
-      engine: withRetry(this.engineApi.getStatus()).pipe(catchError(() => { this.engineErrorSignal.set(true); return of({ status: 'error', message: '' }); })),
-      health: withRetry(this.monitoringApi.getHealth()).pipe(catchError(() => of({ status: 'DOWN' })))
-    }).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
-      next: (result) => {
-        this.portfolioSignal.set(result.portfolio);
-        this.snapshotsSignal.set(result.snapshots);
-        this.pendingApprovalsSignal.set(result.approvals.length);
-        this.engineStatusSignal.set(result.engine.status);
-        this.loadedSignal.set(true);
-        this.lastUpdated.set(new Date());
-      }
+    this.portfolioApi.getPortfolio()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (p) => this.portfolio.set(p),
+        error: () => this.error.set(true)
+      });
+
+    this.engineApi.getStatus()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (s) => this.engineStatus.set(s),
+        error: () => {}
+      });
+
+    this.strategyApi.getAllStrategies()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (list) => {
+          this.strategies.set(list);
+          this.loading.set(false);
+        },
+        error: () => this.loading.set(false)
+      });
+  }
+
+  triggerPipeline(): void {
+    this.engineBusy.set(true);
+    this.engineApi.triggerPipeline().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: (r) => { this.notify.success(r.message || 'Pipeline triggered'); this.engineBusy.set(false); },
+      error: () => { this.notify.error('Trigger failed'); this.engineBusy.set(false); }
     });
   }
 
-  portfolioState(): StatCardState {
-    return this.portfolioErrorSignal() ? 'error' : this.portfolioSignal() === null && !this.loadedSignal() ? 'loading' : 'ok';
+  pauseEngine(): void {
+    this.engineBusy.set(true);
+    this.engineApi.pause().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: (r) => { this.notify.success(r.message || 'Engine paused'); this.engineBusy.set(false); this.loadAll(); },
+      error: () => { this.notify.error('Pause failed'); this.engineBusy.set(false); }
+    });
   }
 
-  approvalsState(): StatCardState {
-    return this.approvalsErrorSignal() ? 'error' : !this.loadedSignal() ? 'loading' : 'ok';
-  }
-
-  engineState(): StatCardState {
-    return this.engineErrorSignal() ? 'error' : !this.loadedSignal() ? 'loading' : 'ok';
-  }
-
-  portfolioValue(): string {
-    return this.formatMoney(this.portfolioSignal()?.netLiquidationValue);
-  }
-
-  cashBalance(): string {
-    return this.formatMoney(this.portfolioSignal()?.totalCashValue);
-  }
-
-  buyingPower(): string {
-    return this.formatMoney(this.portfolioSignal()?.buyingPower);
-  }
-
-  todayPnl(): string {
-    return this.formatMoney(this.portfolioSignal()?.unrealizedPnL);
-  }
-
-  pendingApprovals(): string {
-    return String(this.pendingApprovalsSignal());
-  }
-
-  connectionStatus(): string {
-    return this.engineStatusSignal().toUpperCase();
-  }
-
-  portfolioTrend(): string {
-    return this.snapshotsSignal().length > 1 ? 'History available' : 'Awaiting snapshot history';
-  }
-
-  todayPnlTrend(): string {
-    const snapshot = this.snapshotsSignal()[0];
-    return snapshot ? `Updated ${new Date(snapshot.capturedAt).toLocaleTimeString()}` : 'No history yet';
-  }
-
-  activityTimeline(): readonly { icon: string; label: string; detail: string }[] {
-    return [
-      { icon: 'sync', label: 'Portfolio refresh', detail: this.portfolioSignal()?.lastUpdated ? new Date(this.portfolioSignal()!.lastUpdated).toLocaleString() : 'Waiting on API data' },
-      { icon: 'rule', label: 'Strategy scan', detail: `${this.pendingApprovalsSignal()} plans waiting for approval` },
-      { icon: 'cloud', label: 'Engine status', detail: this.engineStatusSignal() }
-    ];
-  }
-
-  allocationChart(): ChartData<'doughnut'> {
-    const positions = this.portfolioSignal()?.positions ?? [];
-    return {
-      labels: positions.slice(0, 6).map((position) => position.symbol),
-      datasets: [{ data: positions.slice(0, 6).map((position) => Number(position.marketValue.amount)), backgroundColor: ['#4f8cff', '#69d2ff', '#3ddc97', '#f5c451', '#ff7b7b', '#8b5cf6'] }]
-    };
-  }
-
-  pnlChart(): ChartData<'line'> {
-    const snapshots = this.snapshotsSignal().slice().reverse();
-    return {
-      labels: snapshots.map((snapshot) => new Date(snapshot.capturedAt).toLocaleTimeString()),
-      datasets: [{
-        label: 'Unrealized PnL',
-        data: snapshots.map((snapshot) => Number(snapshot.unrealizedPnL.amount)),
-        borderColor: '#69d2ff',
-        backgroundColor: 'rgba(105, 210, 255, 0.15)',
-        tension: 0.35,
-        fill: true
-      }]
-    };
-  }
-
-  assetChart(): ChartData<'bar'> {
-    const positions = this.portfolioSignal()?.positions ?? [];
-    return {
-      labels: positions.slice(0, 8).map((position) => position.symbol),
-      datasets: [{
-        label: 'Market Value',
-        data: positions.slice(0, 8).map((position) => Number(position.marketValue.amount)),
-        backgroundColor: '#4f8cff'
-      }]
-    };
+  resumeEngine(): void {
+    this.engineBusy.set(true);
+    this.engineApi.resume().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: (r) => { this.notify.success(r.message || 'Engine resumed'); this.engineBusy.set(false); this.loadAll(); },
+      error: () => { this.notify.error('Resume failed'); this.engineBusy.set(false); }
+    });
   }
 
   private formatMoney(value?: { amount: string | number } | null): string {
-    if (!value) {
-      return '—';
-    }
-
+    if (!value) return '—';
     return Number(value.amount).toLocaleString(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 2 });
   }
 }

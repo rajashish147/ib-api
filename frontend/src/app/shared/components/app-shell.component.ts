@@ -121,26 +121,11 @@ export class AppShellComponent {
   });
 
   readonly navItems: readonly NavItem[] = [
-    // Overview
     { label: 'Dashboard', icon: 'dashboard', path: '/app/dashboard', group: 'Overview' },
-    // Portfolio
-    { label: 'Portfolio', icon: 'account_balance', path: '/app/portfolio', group: 'Portfolio' },
-    { label: 'Orders & Approvals', icon: 'receipt_long', path: '/app/orders' },
-    // Strategy
-    { label: 'Strategies', icon: 'schema', path: '/app/strategies', group: 'Strategy' },
+    { label: 'Portfolio', icon: 'account_balance', path: '/app/portfolio', group: 'Trading' },
     { label: 'Market Data', icon: 'show_chart', path: '/app/market-data' },
-    // Risk & Analysis
-    { label: 'Analytics', icon: 'query_stats', path: '/app/analytics', group: 'Risk & Analysis' },
-    { label: 'Risk Dashboard', icon: 'shield', path: '/app/risk' },
-    { label: 'Portfolio Goals', icon: 'flag', path: '/app/portfolio-goals' },
-    // Execution
-    { label: 'Paper Trading', icon: 'science', path: '/app/paper-trading', group: 'Execution' },
-    { label: 'Backtesting', icon: 'history', path: '/app/backtesting' },
-    { label: 'Reports', icon: 'bar_chart', path: '/app/reports' },
-    // System
-    { label: 'Monitoring', icon: 'monitor_heart', path: '/app/monitoring', group: 'System' },
-    { label: 'Administration', icon: 'admin_panel_settings', path: '/app/administration' },
-    { label: 'Settings', icon: 'settings', path: '/app/settings' }
+    { label: 'Strategies', icon: 'schema', path: '/app/strategies' },
+    { label: 'Orders', icon: 'receipt_long', path: '/app/orders' },
   ];
 
   toggleSidebar(): void {

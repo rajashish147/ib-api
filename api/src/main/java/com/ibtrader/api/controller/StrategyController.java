@@ -5,6 +5,7 @@ import com.ibtrader.api.dto.StrategyResponseDto;
 import com.ibtrader.api.mapper.StrategyApiMapper;
 import com.ibtrader.domain.model.strategy.TradingStrategy;
 import com.ibtrader.domain.port.inbound.ManageStrategyUseCase;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -31,6 +32,7 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/v1/strategies")
 @RequiredArgsConstructor
+@Tag(name = "Strategies", description = "Create and manage price-threshold auto-trading strategies")
 public class StrategyController {
 
     private final ManageStrategyUseCase manageStrategyUseCase;

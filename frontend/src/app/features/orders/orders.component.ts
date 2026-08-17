@@ -1,210 +1,193 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { MATERIAL_IMPORTS } from '../../shared/material.imports';
-import { EngineApiService } from '../../core/services/engine-api.service';
-import { ApprovalApiService } from '../../core/services/approval-api.service';
-import { RebalancePlanDto } from '../../core/models/api.models';
-import { EmptyStateComponent } from '../../shared/components/empty-state.component';
+import { NotificationService } from '../../core/services/notification.service';
+import { MarketDataApiService } from '../../core/services/market-data-api.service';
+import { OrderApiService, OrderRequest, OrderResponse } from '../../core/services/order-api.service';
+import { MarketDataQuoteDto } from '../../core/models/api.models';
 
 @Component({
   selector: 'app-orders',
   standalone: true,
-  imports: [CommonModule, ...MATERIAL_IMPORTS, EmptyStateComponent],
+  imports: [FormsModule, ...MATERIAL_IMPORTS],
   template: `
-    <section class="orders-page grid">
-      <mat-card class="surface card section-card">
-        <div class="page-info">
-          <div class="page-title">Orders &amp; Approvals</div>
-          <div class="page-subtitle">Manual plan approvals and execution pipeline controls.</div>
-        </div>
-        <div class="actions">
-          <button mat-stroked-button (click)="refresh()">
-            <mat-icon>refresh</mat-icon> Refresh queue
-          </button>
-          <button mat-flat-button color="primary" (click)="triggerPipeline()">
-            <mat-icon>play_arrow</mat-icon> Run pipeline
-          </button>
-          <button mat-stroked-button (click)="pauseEngine()">
-            <mat-icon>pause</mat-icon> Pause
-          </button>
-          <button mat-stroked-button (click)="resumeEngine()">
-            <mat-icon>play_circle</mat-icon> Resume
-          </button>
-        </div>
-      </mat-card>
+    <section class="orders-page">
 
-      <mat-card class="surface card status-card">
-        <div class="status-left">
-          <div class="status-label">Engine status</div>
-          <div class="status-value" [class.positive]="isEngineHealthy()" [class.warning]="isEnginePaused()" [class.negative]="isEngineError()">{{ engineStatus() }}</div>
-        </div>
-        <div class="status-note">{{ engineMessage() }}</div>
-      </mat-card>
+      <!-- Header -->
+      <div class="page-header">
+        <div class="page-title">Orders</div>
+        <div class="page-subtitle muted">Place a buy or sell order directly to IBKR.</div>
+      </div>
 
-      @if (approvals().length) {
-        <mat-card class="surface card list-card">
-          @for (item of approvals(); track item.id) {
-            <div class="approval-row" role="button" tabindex="0"
-                 [attr.aria-pressed]="selectedApproval()?.id === item.id"
-                 [class.selected]="selectedApproval()?.id === item.id"
-                 (click)="select(item)"
-                 (keydown.enter)="select(item)"
-                 (keydown.space)="$event.preventDefault(); select(item)">
-              <div class="approval-summary">
-                <strong>{{ item.strategyId }}</strong>
-                <div class="muted">{{ item.triggerType }} · {{ item.mode }} · {{ item.status }}</div>
-                <div class="muted">{{ item.items.length }} trade items · created {{ item.createdAt | date:'medium' }}</div>
-              </div>
-              <div class="approval-actions">
-                <button mat-stroked-button color="primary" (click)="$event.stopPropagation(); approve(item)">Approve</button>
-                <button mat-stroked-button color="warn" (click)="$event.stopPropagation(); reject(item)">Reject</button>
-              </div>
-            </div>
-          }
-        </mat-card>
-      } @else {
-        <app-empty-state icon="pending_actions" title="No pending approvals" message="The approval queue is empty or the backend has not returned any rebalance plans."></app-empty-state>
-      }
+      <div class="content-grid">
+        <!-- Form -->
+        <mat-card class="surface card form-card">
+          <div class="card-title">New Order</div>
 
-      @if (selectedApproval()) {
-        <mat-card class="surface card detail-card">
-          <div class="detail-title">Plan {{ selectedApproval()!.id }}</div>
-          <div class="detail-grid">
-            <div><span>Strategy</span><strong>{{ selectedApproval()!.strategyId }}</strong></div>
-            <div><span>Trigger</span><strong>{{ selectedApproval()!.triggerType }}</strong></div>
-            <div><span>Mode</span><strong>{{ selectedApproval()!.mode }}</strong></div>
-            <div><span>Status</span><strong>{{ selectedApproval()!.status }}</strong></div>
-            <div><span>Portfolio NLV</span><strong>{{ selectedApproval()!.portfolioNlvAtTrigger.amount }} {{ selectedApproval()!.portfolioNlvAtTrigger.currency }}</strong></div>
-            <div><span>Available Budget</span><strong>{{ selectedApproval()!.availableBudget.amount }} {{ selectedApproval()!.availableBudget.currency }}</strong></div>
-            <div><span>Created</span><strong>{{ selectedApproval()!.createdAt | date:'medium' }}</strong></div>
-            <div><span>Notes</span><strong>{{ selectedApproval()!.notes || 'None' }}</strong></div>
+          <!-- Side toggle -->
+          <div class="side-toggle">
+            <button mat-flat-button [color]="side() === 'BUY' ? 'primary' : 'basic'"
+                    (click)="side.set('BUY')">
+              <mat-icon>trending_up</mat-icon> BUY
+            </button>
+            <button mat-flat-button [color]="side() === 'SELL' ? 'warn' : 'basic'"
+                    (click)="side.set('SELL')">
+              <mat-icon>trending_down</mat-icon> SELL
+            </button>
           </div>
+
+          <!-- Symbol picker -->
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Symbol</mat-label>
+            <mat-select [(ngModel)]="selectedSymbol" (ngModelChange)="onSymbolChange()">
+              @for (q of quotes(); track q.assetId) {
+                <mat-option [value]="q">
+                  {{ q.symbol }}{{ q.lastPrice ? ' — $' + q.lastPrice.toFixed(2) : '' }}{{ q.stale ? ' (stale)' : '' }}
+                </mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+
+          <!-- Order type -->
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Order Type</mat-label>
+            <mat-select [(ngModel)]="orderType">
+              <mat-option value="MARKET">MARKET</mat-option>
+              <mat-option value="LIMIT">LIMIT</mat-option>
+            </mat-select>
+          </mat-form-field>
+
+          <!-- Quantity -->
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Quantity</mat-label>
+            <input matInput type="number" [(ngModel)]="quantity" min="0.0001" step="1" />
+          </mat-form-field>
+
+          <!-- Limit price (LIMIT only) -->
+          @if (orderType === 'LIMIT') {
+            <mat-form-field appearance="outline" class="full-width">
+              <mat-label>Limit Price (USD)</mat-label>
+              <input matInput type="number" [(ngModel)]="limitPrice" min="0.01" step="0.01" />
+            </mat-form-field>
+          }
+
+          <!-- Submit -->
+          <button mat-flat-button [color]="side() === 'BUY' ? 'primary' : 'warn'"
+                  class="submit-btn"
+                  [disabled]="submitting() || !selectedSymbol || !quantity"
+                  (click)="submitOrder()">
+            @if (submitting()) {
+              <mat-spinner diameter="18"></mat-spinner>
+            } @else {
+              <ng-container>
+                <mat-icon>send</mat-icon>
+                {{ side() }} {{ quantity || '' }} {{ selectedSymbol?.symbol || '' }}
+              </ng-container>
+            }
+          </button>
         </mat-card>
-      }
+
+        <!-- Last order result -->
+        @if (lastOrder()) {
+          <mat-card class="surface card result-card">
+            <div class="card-title">Last Submitted Order</div>
+            <div class="result-row"><span class="label">Order ID</span><span class="val">{{ lastOrder()!.orderId }}</span></div>
+            <div class="result-row"><span class="label">Symbol</span><span class="val">{{ lastOrder()!.symbol }}</span></div>
+            <div class="result-row">
+              <span class="label">Side</span>
+              <span class="val" [class.buy]="lastOrder()!.side === 'BUY'" [class.sell]="lastOrder()!.side === 'SELL'">
+                {{ lastOrder()!.side }}
+              </span>
+            </div>
+            <div class="result-row"><span class="label">Type</span><span class="val">{{ lastOrder()!.orderType }}</span></div>
+            <div class="result-row"><span class="label">Qty</span><span class="val">{{ lastOrder()!.quantity }}</span></div>
+            <div class="result-row"><span class="label">Status</span><span class="val">{{ lastOrder()!.status }}</span></div>
+          </mat-card>
+        }
+      </div>
     </section>
   `,
   styles: [`
-    .orders-page { gap: 1rem; }
-    .section-card { display: flex; justify-content: space-between; align-items: center; gap: 1.5rem; padding: 1.25rem 1.5rem; flex-wrap: wrap; }
-    .page-info { flex: 1; min-width: 200px; }
+    .orders-page { display: flex; flex-direction: column; gap: 1.5rem; }
+    .page-header { display: flex; flex-direction: column; gap: 0.2rem; }
     .page-title { font-size: 1.25rem; font-weight: 800; }
-    .page-subtitle, .ticket-note, .muted { color: var(--app-text-muted); }
-    .page-subtitle { margin-top: 0.25rem; font-size: 0.9rem; }
-    .actions { display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: center; }
-    .status-card { padding: 1.25rem 1.5rem; display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
-    .status-left { display: grid; gap: 0.2rem; }
-    .status-label { color: var(--app-text-muted); font-size: 0.82rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
-    .status-value { font-size: 1.4rem; font-weight: 800; text-transform: uppercase; }
-    .status-note { color: var(--app-text-muted); font-size: 0.9rem; }
-    .list-card, .ticket-card { padding: 1rem; }
-    .approval-row { width: 100%; display: flex; justify-content: space-between; gap: 1rem; padding: 1rem 0; border: 0; border-bottom: 1px solid var(--app-border); background: transparent; color: inherit; text-align: left; cursor: pointer; }
-    .approval-row:last-child { border-bottom: 0; }
-    .approval-row:hover { background: color-mix(in srgb, var(--app-primary) 5%, transparent); }
-    .approval-row.selected { background: color-mix(in srgb, var(--app-primary) 8%, transparent); }
-    .approval-row:focus-visible { outline: 2px solid var(--app-primary); outline-offset: -2px; }
-    .approval-summary { display: grid; gap: 0.25rem; }
-    .approval-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
-    .detail-card { padding: 1rem; display: grid; gap: 0.75rem; }
-    .detail-title { font-weight: 800; }
-    .detail-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.75rem; }
-    .detail-grid div { display: grid; gap: 0.25rem; padding: 0.75rem; border: 1px solid var(--app-border); border-radius: 14px; }
-    .detail-grid span { color: var(--app-text-muted); font-size: 0.82rem; }
-    @media (max-width: 1100px) { .detail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-    @media (max-width: 720px) { .section-card, .status-card { flex-direction: column; align-items: start; } .approval-row { flex-direction: column; } .detail-grid { grid-template-columns: 1fr; } }
+    .muted { color: var(--app-text-muted); }
+    .content-grid { display: grid; grid-template-columns: 420px 1fr; gap: 1.5rem; align-items: start; }
+    .form-card, .result-card { padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem; }
+    .card-title { font-weight: 700; font-size: 1rem; }
+    .side-toggle { display: flex; gap: 0.5rem; }
+    .side-toggle button { flex: 1; }
+    .full-width { width: 100%; }
+    .submit-btn { width: 100%; height: 48px; font-size: 1rem; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 0.5rem; }
+    .result-row { display: flex; justify-content: space-between; padding: 0.4rem 0; border-bottom: 1px solid var(--app-border); }
+    .result-row:last-child { border-bottom: none; }
+    .label { color: var(--app-text-muted); font-size: 0.9rem; }
+    .val { font-weight: 600; font-size: 0.9rem; }
+    .buy { color: #22c55e; }
+    .sell { color: #ef4444; }
+    @media (max-width: 800px) { .content-grid { grid-template-columns: 1fr; } }
   `],
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class OrdersComponent {
-  private readonly approvalApi = inject(ApprovalApiService);
-  private readonly engineApi = inject(EngineApiService);
+  private readonly orderApi = inject(OrderApiService);
+  private readonly marketDataApi = inject(MarketDataApiService);
+  private readonly notify = inject(NotificationService);
   private readonly destroyRef = inject(DestroyRef);
-  readonly approvals = signal<readonly RebalancePlanDto[]>([]);
-  readonly selectedApproval = signal<RebalancePlanDto | null>(null);
-  readonly engineStatus = signal('UNKNOWN');
-  readonly engineMessage = signal('Engine status not loaded yet');
+
+  readonly side = signal<'BUY' | 'SELL'>('BUY');
+  readonly submitting = signal(false);
+  readonly quotes = signal<MarketDataQuoteDto[]>([]);
+  readonly lastOrder = signal<OrderResponse | null>(null);
+
+  selectedSymbol: MarketDataQuoteDto | null = null;
+  orderType: 'MARKET' | 'LIMIT' = 'MARKET';
+  quantity: number | null = null;
+  limitPrice: number | null = null;
 
   constructor() {
-    this.refresh();
+    this.loadQuotes();
   }
 
-  refresh(): void {
-    this.approvalApi.getPendingApprovals().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
-      next: (approvals) => this.approvals.set(approvals),
-      error: () => { /* handled by interceptor */ }
-    });
-    this.engineApi.getStatus().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
-      next: (status) => {
-        this.engineStatus.set(status.status);
-        this.engineMessage.set(status.message);
-      },
-      error: () => {
-        this.engineStatus.set('ERROR');
-        this.engineMessage.set('Could not reach engine status endpoint.');
-      }
-    });
+  onSymbolChange(): void {
+    if (this.selectedSymbol?.lastPrice) {
+      this.limitPrice = this.selectedSymbol.lastPrice;
+    }
   }
 
-  triggerPipeline(): void {
-    this.engineApi.triggerPipeline().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
-      next: () => this.refresh(),
-      error: () => { /* handled by interceptor */ }
-    });
+  private loadQuotes(): void {
+    this.marketDataApi.getQuotes()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({ next: (q) => this.quotes.set([...q]) });
   }
 
-  pauseEngine(): void {
-    this.engineApi.pause().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
-      next: (status) => {
-        this.engineStatus.set(status.status);
-        this.engineMessage.set('Engine paused');
-      },
-      error: () => { /* handled by interceptor */ }
-    });
-  }
+  submitOrder(): void {
+    if (!this.selectedSymbol || !this.quantity) return;
+    this.submitting.set(true);
 
-  resumeEngine(): void {
-    this.engineApi.resume().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
-      next: (status) => {
-        this.engineStatus.set(status.status);
-        this.engineMessage.set('Engine running');
-      },
-      error: () => { /* handled by interceptor */ }
-    });
-  }
+    const req: OrderRequest = {
+      symbol: this.selectedSymbol.symbol,
+      assetId: this.selectedSymbol.assetId,
+      side: this.side(),
+      orderType: this.orderType,
+      quantity: this.quantity,
+      limitPrice: this.orderType === 'LIMIT' ? this.limitPrice : null,
+    };
 
-  approve(plan: RebalancePlanDto): void {
-    this.approvalApi.approvePlan(plan.id).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
-      next: () => {
-        this.selectedApproval.set(null);
-        this.refresh();
-      },
-      error: () => { /* handled by interceptor */ }
-    });
-  }
-
-  reject(plan: RebalancePlanDto): void {
-    this.approvalApi.rejectPlan(plan.id).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
-      next: () => {
-        this.selectedApproval.set(null);
-        this.refresh();
-      },
-      error: () => { /* handled by interceptor */ }
-    });
-  }
-
-  select(plan: RebalancePlanDto): void {
-    this.selectedApproval.set(plan);
-  }
-
-  isEngineHealthy(): boolean {
-    return /^(running|up)$/i.test(this.engineStatus());
-  }
-
-  isEnginePaused(): boolean {
-    return /^paused$/i.test(this.engineStatus());
-  }
-
-  isEngineError(): boolean {
-    return /^error$/i.test(this.engineStatus());
+    this.orderApi.submitOrder(req)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (order) => {
+          this.lastOrder.set(order);
+          this.notify.success(`${req.side} order for ${req.quantity} ${req.symbol} submitted (${order.status})`);
+          this.submitting.set(false);
+          this.quantity = null;
+        },
+        error: (err) => {
+          this.notify.error(err?.error?.message ?? 'Order submission failed');
+          this.submitting.set(false);
+        }
+      });
   }
 }

@@ -1,152 +1,181 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  DestroyRef,
+  inject,
+  signal,
+} from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
-import { MatDialog } from '@angular/material/dialog';
+import { FormsModule } from '@angular/forms';
 import { MATERIAL_IMPORTS } from '../../shared/material.imports';
 import { StrategyApiService } from '../../core/services/strategy-api.service';
-import { BasketTargetRequestDto, StrategyDto } from '../../core/models/api.models';
-import { EmptyStateComponent } from '../../shared/components/empty-state.component';
-import { ConfirmDialogComponent } from '../../shared/components/confirm-dialog.component';
+import { NotificationService } from '../../core/services/notification.service';
+import { StrategyDto, StrategyRequestDto, BasketTargetRequestDto } from '../../core/models/api.models';
+
+interface StockRow {
+  symbol: string;
+  quantity: number | null;
+}
 
 @Component({
   selector: 'app-strategies',
   standalone: true,
-  imports: [ReactiveFormsModule, ...MATERIAL_IMPORTS, EmptyStateComponent],
+  imports: [FormsModule, ...MATERIAL_IMPORTS],
   template: `
     <section class="page grid">
+
+      <!-- Header -->
       <mat-card class="surface card header-card">
         <div class="header-info">
           <div class="page-title">Strategies</div>
-          <div class="page-subtitle">Create, edit, enable, disable, and retire basket trading strategies.</div>
+          <div class="page-subtitle">Create, edit, enable and disable basket trading strategies.</div>
         </div>
         <div class="header-actions">
           <button mat-stroked-button (click)="refresh()">
             <mat-icon>refresh</mat-icon> Refresh
           </button>
-          <button mat-flat-button color="primary" (click)="toggleForm()">
-            <mat-icon>{{ showForm() ? 'close' : 'add' }}</mat-icon> {{ showForm() ? 'Close form' : 'New strategy' }}
+          <button mat-flat-button color="primary" (click)="openNewForm()">
+            <mat-icon>add</mat-icon> New Strategy
           </button>
         </div>
       </mat-card>
 
-      <div class="strategies-layout" [class.form-visible]="showForm() || editingStrategyId()">
-        <!-- Left: Form (shown only when toggled or editing) -->
-        @if (showForm() || editingStrategyId()) {
-          <mat-card class="surface card form-card">
-            <div class="form-header">
-              <div class="form-title">{{ editingStrategyId() ? 'Edit — ' + (editingStrategy()?.name ?? '') : 'New Strategy' }}</div>
-              <div class="form-hint">{{ editingStrategyId() ? 'Editing updates the selected record.' : 'Fill in the details to create a new strategy.' }}</div>
-            </div>
-            <form class="strategy-form" [formGroup]="form">
-              <mat-form-field appearance="outline">
-                <mat-label>Name *</mat-label>
-                <input matInput formControlName="name" placeholder="GOOGL Single Share" />
-                @if (form.get('name')?.errors?.['required']) {
-                  <mat-error>Name is required</mat-error>
-                }
-              </mat-form-field>
-              <mat-form-field appearance="outline"><mat-label>Description</mat-label><input matInput formControlName="description" placeholder="Buy 1 share at $150, sell at $200" /></mat-form-field>
-              <mat-form-field appearance="outline"><mat-label>Priority</mat-label><input matInput type="number" formControlName="priority" placeholder="0" /></mat-form-field>
-              <mat-form-field appearance="outline"><mat-label>Cooldown (min)</mat-label><input matInput type="number" formControlName="cooldownMinutes" placeholder="60" /></mat-form-field>
+      <!-- Error -->
+      @if (loadError()) {
+        <mat-card class="surface card error-card">
+          <mat-icon class="error-icon">error_outline</mat-icon>
+          <div>
+            <div class="error-title">Failed to load strategies</div>
+          </div>
+          <button mat-stroked-button (click)="refresh()">Retry</button>
+        </mat-card>
+      }
 
-              <mat-form-field appearance="outline">
-                <mat-label>Risk Profile</mat-label>
-                <mat-select formControlName="riskProfile">
-                  <mat-option value="CONSERVATIVE">Conservative</mat-option>
-                  <mat-option value="MODERATE">Moderate</mat-option>
-                  <mat-option value="AGGRESSIVE">Aggressive</mat-option>
-                </mat-select>
-              </mat-form-field>
+      <!-- Inline form -->
+      @if (showForm()) {
+        <mat-card class="surface card form-card">
+          <div class="form-title">{{ editingId() ? 'Edit Strategy' : 'New Strategy' }}</div>
 
-              <mat-form-field appearance="outline">
-                <mat-label>Execution Mode</mat-label>
-                <mat-select formControlName="executionMode">
-                  <mat-option value="FULL_REBALANCE">Full Rebalance</mat-option>
-                  <mat-option value="FIXED_AMOUNT">Fixed Amount</mat-option>
-                  <mat-option value="HYBRID">Hybrid</mat-option>
-                  <mat-option value="AUTO">Auto</mat-option>
-                </mat-select>
-              </mat-form-field>
+          <div class="form-grid">
+            <mat-form-field appearance="outline" class="span-2">
+              <mat-label>Name *</mat-label>
+              <input matInput [(ngModel)]="formName" placeholder="My Strategy" />
+            </mat-form-field>
 
-              <mat-form-field appearance="outline">
-                <mat-label>Buy Threshold ($)</mat-label>
-                <input matInput type="number" formControlName="buyThreshold" placeholder="150.00" />
-                <mat-hint>Buy when asset price ≤ this value</mat-hint>
-              </mat-form-field>
-              <mat-form-field appearance="outline">
-                <mat-label>Sell Threshold ($)</mat-label>
-                <input matInput type="number" formControlName="sellThreshold" placeholder="200.00" />
-                <mat-hint>Sell when asset price ≥ this value</mat-hint>
-              </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>Buy Threshold $</mat-label>
+              <input matInput type="number" [(ngModel)]="formBuyThreshold" placeholder="150.00" />
+              <mat-hint>Buy when price drops to or below this</mat-hint>
+            </mat-form-field>
 
-              <div class="targets-header">Basket Target</div>
+            <mat-form-field appearance="outline">
+              <mat-label>Sell Threshold $</mat-label>
+              <input matInput type="number" [(ngModel)]="formSellThreshold" placeholder="200.00" />
+              <mat-hint>Sell when price rises to or above this</mat-hint>
+            </mat-form-field>
+          </div>
 
-              <mat-form-field appearance="outline">
-                <mat-label>Symbol *</mat-label>
-                <input matInput formControlName="targetSymbol" placeholder="GOOGL" style="text-transform:uppercase" />
-                <mat-hint>Registered asset symbol</mat-hint>
+          <!-- Stocks section -->
+          <div class="stocks-header">
+            <span class="subsection-title">Stocks / Targets</span>
+            <button mat-stroked-button type="button" (click)="addStockRow()">
+              <mat-icon>add</mat-icon> Add Stock
+            </button>
+          </div>
+          @for (row of stockRows(); track $index) {
+            <div class="stock-row">
+              <mat-form-field appearance="outline" class="stock-sym">
+                <mat-label>Symbol</mat-label>
+                <input matInput [(ngModel)]="row.symbol" placeholder="AAPL" style="text-transform:uppercase" />
               </mat-form-field>
-
-              <mat-form-field appearance="outline">
-                <mat-label>Asset Class</mat-label>
-                <mat-select formControlName="targetAssetClass">
-                  <mat-option value="STOCK">Stock</mat-option>
-                  <mat-option value="ETF">ETF</mat-option>
-                  <mat-option value="FUTURES">Futures</mat-option>
-                </mat-select>
-              </mat-form-field>
-
-              <mat-form-field appearance="outline">
+              <mat-form-field appearance="outline" class="stock-qty">
                 <mat-label>Quantity</mat-label>
-                <input matInput type="number" formControlName="targetQuantity" placeholder="1" />
-                <mat-hint>Number of shares / contracts</mat-hint>
+                <input matInput type="number" [(ngModel)]="row.quantity" placeholder="1" min="0.0001" />
               </mat-form-field>
-
-              <mat-checkbox formControlName="enabled">Enabled</mat-checkbox>
-            </form>
-            <div class="form-footer">
-              <button mat-flat-button color="primary" (click)="createStrategy()" [disabled]="form.invalid">
-                <mat-icon>{{ editingStrategyId() ? 'save' : 'add_circle' }}</mat-icon>
-                {{ editingStrategyId() ? 'Save changes' : 'Create strategy' }}
+              <button mat-icon-button color="warn" type="button" (click)="removeStockRow($index)" matTooltip="Remove">
+                <mat-icon>delete</mat-icon>
               </button>
-              <button mat-stroked-button (click)="closeForm()">Cancel</button>
             </div>
-          </mat-card>
-        }
+          }
 
+          <div class="enabled-row">
+            <mat-checkbox [(ngModel)]="formEnabled">Enabled</mat-checkbox>
+          </div>
 
-        <!-- Right: List -->
-        <div class="list-column">
-          @if (strategies().length) {
-            <mat-card class="surface card list-card">
-              <div class="list-header">{{ strategies().length }} strategies</div>
-              @for (strategy of strategies(); track strategy.id) {
-                <div class="strategy-row" role="button" tabindex="0"
-                     [attr.aria-pressed]="editingStrategyId() === strategy.id"
-                     [class.selected]="editingStrategyId() === strategy.id"
-                     (click)="edit(strategy)"
-                     (keydown.enter)="edit(strategy)"
-                     (keydown.space)="$event.preventDefault(); edit(strategy)">
-                  <div class="strategy-summary">
-                    <div class="strategy-name">
-                      <span class="status-dot" [class.enabled]="strategy.enabled" [class.disabled]="!strategy.enabled" [attr.aria-label]="strategy.enabled ? 'Enabled' : 'Disabled'"></span>
-                      {{ strategy.name }}
-                    </div>
-                    <div class="muted">{{ strategy.riskProfile }} · {{ strategy.executionMode }} · priority {{ strategy.priority }}</div>
-                    <div class="muted">{{ strategy.targets.length }} targets · {{ strategy.state ?? 'UNKNOWN' }}</div>
+          <div class="form-footer">
+            <button mat-flat-button color="primary" [disabled]="!formName || saving()" (click)="saveStrategy()">
+              <mat-icon>save</mat-icon> {{ saving() ? 'Saving…' : (editingId() ? 'Save Changes' : 'Create Strategy') }}
+            </button>
+            <button mat-stroked-button (click)="closeForm()">Cancel</button>
+          </div>
+        </mat-card>
+      }
+
+      <!-- Strategy cards -->
+      @if (loading()) {
+        <div class="spinner-row">
+          <mat-spinner diameter="32"></mat-spinner>
+          <span class="muted">Loading strategies…</span>
+        </div>
+      } @else if (strategies().length === 0 && !loadError()) {
+        <mat-card class="surface card empty-card">
+          <mat-icon>schema</mat-icon>
+          <div>
+            <strong>No strategies yet</strong>
+            <div class="muted">Click "New Strategy" to create one.</div>
+          </div>
+        </mat-card>
+      } @else {
+        <div class="cards-grid">
+          @for (s of strategies(); track s.id) {
+            <mat-card class="surface card strat-card" [class.enabled-card]="s.enabled">
+              <div class="strat-card-header">
+                <div>
+                  <div class="strat-name">
+                    <span class="status-dot" [class.enabled]="s.enabled" [class.disabled]="!s.enabled"></span>
+                    {{ s.name }}
                   </div>
-                  <div class="strategy-actions">
-                    <button mat-stroked-button (click)="$event.stopPropagation(); toggle(strategy)">{{ strategy.enabled ? 'Disable' : 'Enable' }}</button>
-                    <button mat-stroked-button color="warn" (click)="$event.stopPropagation(); remove(strategy)">Delete</button>
-                  </div>
+                  <div class="strat-meta muted">{{ s.targets.length }} target(s) · {{ s.enabled ? 'Enabled' : 'Disabled' }}</div>
+                </div>
+                <div class="strat-badge" [class.enabled]="s.enabled" [class.disabled]="!s.enabled">
+                  {{ s.enabled ? 'ON' : 'OFF' }}
+                </div>
+              </div>
+
+              <div class="strat-thresholds">
+                <div class="threshold-item">
+                  <div class="threshold-label">Buy ≤</div>
+                  <div class="threshold-value">{{ s.buyThreshold != null ? '$' + (+s.buyThreshold).toFixed(2) : '—' }}</div>
+                </div>
+                <div class="threshold-item">
+                  <div class="threshold-label">Sell ≥</div>
+                  <div class="threshold-value">{{ s.sellThreshold != null ? '$' + (+s.sellThreshold).toFixed(2) : '—' }}</div>
+                </div>
+              </div>
+
+              @if (s.targets.length > 0) {
+                <div class="strat-targets">
+                  @for (t of s.targets; track t.id) {
+                    <span class="target-chip">{{ t.symbol }} × {{ t.quantity }}</span>
+                  }
                 </div>
               }
+
+              <div class="strat-actions">
+                <button mat-stroked-button (click)="editStrategy(s)">
+                  <mat-icon>edit</mat-icon> Edit
+                </button>
+                <button mat-stroked-button (click)="toggleStrategy(s)" [disabled]="toggling() === s.id">
+                  {{ s.enabled ? 'Disable' : 'Enable' }}
+                </button>
+                <button mat-stroked-button color="warn" (click)="deleteStrategy(s)" [disabled]="deleting() === s.id">
+                  <mat-icon>delete</mat-icon>
+                </button>
+              </div>
             </mat-card>
-          } @else {
-            <app-empty-state icon="schema" title="No strategies" message="Create the first basket strategy to start driving the engine pipeline."></app-empty-state>
           }
         </div>
-      </div>
+      }
     </section>
   `,
   styles: [`
@@ -154,198 +183,197 @@ import { ConfirmDialogComponent } from '../../shared/components/confirm-dialog.c
     .header-card { display: flex; justify-content: space-between; align-items: center; gap: 1.5rem; padding: 1.25rem 1.5rem; flex-wrap: wrap; }
     .header-info { flex: 1; min-width: 200px; }
     .page-title { font-size: 1.25rem; font-weight: 800; }
-    .page-subtitle, .muted { color: var(--app-text-muted); }
-    .page-subtitle { margin-top: 0.25rem; font-size: 0.9rem; }
+    .page-subtitle { color: var(--app-text-muted); margin-top: 0.25rem; font-size: 0.9rem; }
     .header-actions { display: flex; gap: 0.75rem; flex-wrap: wrap; }
-    /* Two-column layout: form on left, list on right — only when form is shown */
-    .strategies-layout { display: grid; grid-template-columns: 1fr; gap: 1rem; align-items: start; }
-    .strategies-layout.form-visible { grid-template-columns: 1fr 1fr; }
-    .form-card { padding: 1.5rem; display: grid; gap: 1rem; }
-    .form-header { display: grid; gap: 0.25rem; }
+    .muted { color: var(--app-text-muted); }
+    .error-card { display: flex; align-items: center; gap: 1rem; padding: 1rem 1.5rem; }
+    .error-icon { color: #ef4444; }
+    .error-title { font-weight: 700; color: #ef4444; }
+    .spinner-row { display: flex; align-items: center; gap: 1rem; padding: 1rem; }
+    /* Form */
+    .form-card { padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem; }
     .form-title { font-weight: 800; font-size: 1rem; }
-    .form-hint { color: var(--app-text-muted); font-size: 0.85rem; }
-    .strategy-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem 0.75rem; align-items: start; }
-    .strategy-form mat-checkbox { align-self: center; grid-column: span 2; }
-    .targets-header { grid-column: span 2; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--app-text-muted); border-top: 1px solid var(--app-border); padding-top: 0.75rem; margin-top: 0.25rem; }
-    .form-footer { display: flex; gap: 0.75rem; align-items: center; padding-top: 0.5rem; border-top: 1px solid var(--app-border); }
-    .list-column { display: grid; gap: 1rem; }
-    .list-card { padding: 0; overflow: hidden; }
-    .list-header { padding: 1rem 1.25rem 0.75rem; font-weight: 700; font-size: 0.85rem; color: var(--app-text-muted); text-transform: uppercase; letter-spacing: 0.06em; border-bottom: 1px solid var(--app-border); }
-    .strategy-row { width: 100%; display: flex; justify-content: space-between; gap: 1rem; padding: 1rem 1.25rem; border: 0; border-bottom: 1px solid var(--app-border); background: transparent; color: inherit; text-align: left; cursor: pointer; transition: background 0.15s; }
-    .strategy-row:last-child { border-bottom: 0; }
-    .strategy-row:hover { background: color-mix(in srgb, var(--app-primary) 6%, transparent); }
-    .strategy-row.selected { background: color-mix(in srgb, var(--app-primary) 10%, transparent); }
-    .strategy-row:focus-visible { outline: 2px solid var(--app-primary); outline-offset: -2px; }
-    .strategy-summary { display: grid; gap: 0.25rem; min-width: 0; }
-    .strategy-name { font-weight: 700; display: flex; align-items: center; gap: 0.5rem; }
-    .status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-    .status-dot.enabled { background: var(--app-positive); }
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+    .span-2 { grid-column: span 2; }
+    .stocks-header { display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--app-border); padding-top: 0.75rem; }
+    .subsection-title { font-weight: 700; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--app-text-muted); }
+    .stock-row { display: flex; gap: 0.75rem; align-items: center; }
+    .stock-sym { flex: 2; }
+    .stock-qty { flex: 1; }
+    .enabled-row { display: flex; align-items: center; }
+    .form-footer { display: flex; gap: 0.75rem; align-items: center; border-top: 1px solid var(--app-border); padding-top: 0.75rem; }
+    /* Cards */
+    .cards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1rem; }
+    .strat-card { padding: 1.25rem; display: flex; flex-direction: column; gap: 0.75rem; border-left: 3px solid var(--app-border); }
+    .strat-card.enabled-card { border-left-color: #22c55e; }
+    .strat-card-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.5rem; }
+    .strat-name { font-weight: 700; display: flex; align-items: center; gap: 0.5rem; }
+    .strat-meta { font-size: 0.85rem; margin-top: 0.2rem; }
+    .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .status-dot.enabled { background: #22c55e; }
     .status-dot.disabled { background: var(--app-text-muted); }
-    .strategy-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: start; flex-shrink: 0; }
-    @media (max-width: 1100px) { .strategies-layout, .strategies-layout.form-visible { grid-template-columns: 1fr; } .strategy-form { grid-template-columns: 1fr; } .strategy-form mat-checkbox { grid-column: span 1; } }
-    @media (max-width: 720px) { .header-card { flex-direction: column; align-items: start; } }
+    .strat-badge { padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.7rem; font-weight: 800; letter-spacing: 0.05em; }
+    .strat-badge.enabled { background: color-mix(in srgb, #22c55e 15%, transparent); color: #22c55e; }
+    .strat-badge.disabled { background: color-mix(in srgb, var(--app-text-muted) 15%, transparent); color: var(--app-text-muted); }
+    .strat-thresholds { display: flex; gap: 1.5rem; }
+    .threshold-item { display: flex; flex-direction: column; gap: 0.1rem; }
+    .threshold-label { font-size: 0.75rem; color: var(--app-text-muted); }
+    .threshold-value { font-weight: 700; font-variant-numeric: tabular-nums; }
+    .strat-targets { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+    .target-chip { background: var(--app-surface); border: 1px solid var(--app-border); border-radius: 4px; padding: 0.15rem 0.45rem; font-size: 0.8rem; font-weight: 600; }
+    .strat-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    .empty-card { display: flex; align-items: center; gap: 1rem; padding: 2rem; }
+    .empty-card mat-icon { font-size: 2.5rem; width: 2.5rem; height: 2.5rem; color: var(--app-text-muted); }
+    @media (max-width: 720px) { .header-card { flex-direction: column; align-items: start; } .form-grid { grid-template-columns: 1fr; } .span-2 { grid-column: span 1; } .stock-row { flex-direction: column; align-items: stretch; } }
   `],
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class StrategiesComponent {
   private readonly strategyApi = inject(StrategyApiService);
-  private readonly dialog = inject(MatDialog);
+  private readonly notify = inject(NotificationService);
   private readonly destroyRef = inject(DestroyRef);
 
   readonly strategies = signal<readonly StrategyDto[]>([]);
-  readonly editingStrategy = signal<StrategyDto | null>(null);
-  readonly editingStrategyId = signal<string | null>(null);
-  readonly error = signal(false);
+  readonly loading = signal(true);
+  readonly loadError = signal(false);
   readonly showForm = signal(false);
-  private readonly existingTargets = signal<readonly BasketTargetRequestDto[]>([]);
+  readonly saving = signal(false);
+  readonly toggling = signal<string | null>(null);
+  readonly deleting = signal<string | null>(null);
+  readonly editingId = signal<string | null>(null);
 
-  readonly form = new FormGroup({
-    name: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
-    description: new FormControl('', { nonNullable: true }),
-    priority: new FormControl(0, { nonNullable: true }),
-    cooldownMinutes: new FormControl(0, { nonNullable: true }),
-    riskProfile: new FormControl('MODERATE', { nonNullable: true }),
-    executionMode: new FormControl('FIXED_AMOUNT', { nonNullable: true }),
-    buyThreshold: new FormControl<number | null>(null),
-    sellThreshold: new FormControl<number | null>(null),
-    targetSymbol: new FormControl('', { nonNullable: true }),
-    targetAssetClass: new FormControl('STOCK', { nonNullable: true }),
-    targetQuantity: new FormControl<number | null>(null),
-    enabled: new FormControl(true, { nonNullable: true })
-  });
+  // Form fields
+  formName = '';
+  formBuyThreshold: number | null = null;
+  formSellThreshold: number | null = null;
+  formEnabled = true;
+  stockRows = signal<StockRow[]>([{ symbol: '', quantity: null }]);
 
   constructor() {
     this.refresh();
   }
 
   refresh(): void {
-    this.error.set(false);
+    this.loading.set(true);
+    this.loadError.set(false);
     this.strategyApi.getAllStrategies().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
-      next: (strategies) => this.strategies.set(strategies),
-      error: () => this.error.set(true)
+      next: (list) => {
+        this.strategies.set(list);
+        this.loading.set(false);
+      },
+      error: () => {
+        this.loadError.set(true);
+        this.loading.set(false);
+      }
     });
   }
 
-  edit(strategy: StrategyDto): void {
+  openNewForm(): void {
+    this.editingId.set(null);
+    this.formName = '';
+    this.formBuyThreshold = null;
+    this.formSellThreshold = null;
+    this.formEnabled = true;
+    this.stockRows.set([{ symbol: '', quantity: null }]);
     this.showForm.set(true);
-    this.editingStrategy.set(strategy);
-    this.editingStrategyId.set(strategy.id);
-    this.existingTargets.set(strategy.targets.map((target) => ({ id: target.id, symbol: target.symbol, assetClass: target.assetClass, quantity: target.quantity })));
-    this.form.patchValue({
-      name: strategy.name,
-      description: strategy.description ?? '',
-      priority: strategy.priority,
-      cooldownMinutes: strategy.cooldownMinutes,
-      riskProfile: strategy.riskProfile,
-      executionMode: strategy.executionMode,
-      buyThreshold: strategy.buyThreshold === null ? null : Number(strategy.buyThreshold),
-      sellThreshold: strategy.sellThreshold === null ? null : Number(strategy.sellThreshold),
-      targetSymbol: strategy.targets[0]?.symbol ?? '',
-      targetAssetClass: strategy.targets[0]?.assetClass ?? 'STOCK',
-      targetQuantity: strategy.targets[0]?.quantity === undefined ? null : Number(strategy.targets[0]?.quantity),
-      enabled: strategy.enabled
-    });
   }
 
-  clearSelection(): void {
-    this.editingStrategy.set(null);
-    this.editingStrategyId.set(null);
-    this.existingTargets.set([]);
-    this.form.reset({
-      name: '',
-      description: '',
-      priority: 0,
-      cooldownMinutes: 60,
-      riskProfile: 'MODERATE',
-      executionMode: 'FIXED_AMOUNT',
-      buyThreshold: null,
-      sellThreshold: null,
-      targetSymbol: '',
-      targetAssetClass: 'STOCK',
-      targetQuantity: null,
-      enabled: true
-    });
-  }
-
-  toggleForm(): void {
-    if (this.showForm() && !this.editingStrategyId()) {
-      this.showForm.set(false);
-    } else {
-      this.clearSelection();
-      this.showForm.set(true);
-    }
+  editStrategy(s: StrategyDto): void {
+    this.editingId.set(s.id);
+    this.formName = s.name;
+    this.formBuyThreshold = s.buyThreshold !== null && s.buyThreshold !== undefined ? Number(s.buyThreshold) : null;
+    this.formSellThreshold = s.sellThreshold !== null && s.sellThreshold !== undefined ? Number(s.sellThreshold) : null;
+    this.formEnabled = s.enabled;
+    this.stockRows.set(
+      s.targets.length > 0
+        ? s.targets.map(t => ({ symbol: t.symbol, quantity: Number(t.quantity) }))
+        : [{ symbol: '', quantity: null }]
+    );
+    this.showForm.set(true);
   }
 
   closeForm(): void {
     this.showForm.set(false);
-    this.clearSelection();
+    this.editingId.set(null);
   }
 
-  createStrategy(): void {
-    const value = this.form.getRawValue();
-    const targets: readonly BasketTargetRequestDto[] = value.targetSymbol && value.targetQuantity != null
-      ? [{ symbol: value.targetSymbol.toUpperCase(), assetClass: value.targetAssetClass, quantity: value.targetQuantity }]
-      : this.existingTargets();
+  addStockRow(): void {
+    this.stockRows.update(rows => [...rows, { symbol: '', quantity: null }]);
+  }
 
-    const request = {
-      name: value.name,
-      description: value.description || null,
-      priority: value.priority,
-      cooldownMinutes: value.cooldownMinutes,
-      riskProfile: value.riskProfile,
-      executionMode: value.executionMode,
-      buyThreshold: value.buyThreshold,
-      sellThreshold: value.sellThreshold,
-      enabled: value.enabled,
+  removeStockRow(index: number): void {
+    this.stockRows.update(rows => rows.filter((_, i) => i !== index));
+  }
+
+  saveStrategy(): void {
+    if (!this.formName) return;
+    this.saving.set(true);
+
+    const targets: readonly BasketTargetRequestDto[] = this.stockRows()
+      .filter(r => r.symbol && r.quantity != null)
+      .map(r => ({ symbol: r.symbol.toUpperCase(), assetClass: 'STOCK', quantity: r.quantity! }));
+
+    const req: StrategyRequestDto = {
+      name: this.formName,
+      enabled: this.formEnabled,
+      buyThreshold: this.formBuyThreshold,
+      sellThreshold: this.formSellThreshold,
+      executionMode: 'AUTO',
       targets
     };
 
-    const action$ = this.editingStrategyId()
-      ? this.strategyApi.updateStrategy(this.editingStrategyId()!, request)
-      : this.strategyApi.createStrategy(request);
+    const id = this.editingId();
+    const action$ = id
+      ? this.strategyApi.updateStrategy(id, req)
+      : this.strategyApi.createStrategy(req);
 
     action$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: () => {
+        this.notify.success(id ? 'Strategy updated' : 'Strategy created');
+        this.saving.set(false);
         this.closeForm();
         this.refresh();
       },
-      error: () => { /* handled by interceptor */ }
+      error: (err) => {
+        this.notify.error(err?.error?.message ?? 'Save failed');
+        this.saving.set(false);
+      }
     });
   }
 
-  toggle(strategy: StrategyDto): void {
-    const action = strategy.enabled ? this.strategyApi.disableStrategy(strategy.id) : this.strategyApi.enableStrategy(strategy.id);
-    action.pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
-      next: () => this.refresh(),
-      error: () => { /* handled by interceptor */ }
+  toggleStrategy(s: StrategyDto): void {
+    this.toggling.set(s.id);
+    const action$ = s.enabled
+      ? this.strategyApi.disableStrategy(s.id)
+      : this.strategyApi.enableStrategy(s.id);
+
+    action$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: () => {
+        this.notify.success(s.enabled ? 'Strategy disabled' : 'Strategy enabled');
+        this.toggling.set(null);
+        this.refresh();
+      },
+      error: (err) => {
+        this.notify.error(err?.error?.message ?? 'Toggle failed');
+        this.toggling.set(null);
+      }
     });
   }
 
-  remove(strategy: StrategyDto): void {
-    this.dialog
-      .open(ConfirmDialogComponent, {
-        data: {
-          title: 'Delete strategy',
-          message: `Delete "${strategy.name}"? This cannot be undone.`,
-          confirmLabel: 'Delete'
-        },
-        autoFocus: 'first-tabbable'
-      })
-      .afterClosed()
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe((confirmed) => {
-        if (!confirmed) {
-          return;
-        }
-
-        if (this.editingStrategyId() === strategy.id) {
-          this.closeForm();
-        }
-
-        this.strategyApi.deleteStrategy(strategy.id).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
-          next: () => this.refresh(),
-          error: () => { /* handled by interceptor */ }
-        });
-      });
+  deleteStrategy(s: StrategyDto): void {
+    if (!confirm(`Delete "${s.name}"? This cannot be undone.`)) return;
+    this.deleting.set(s.id);
+    this.strategyApi.deleteStrategy(s.id).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: () => {
+        this.notify.success('Strategy deleted');
+        this.deleting.set(null);
+        if (this.editingId() === s.id) this.closeForm();
+        this.refresh();
+      },
+      error: (err) => {
+        this.notify.error(err?.error?.message ?? 'Delete failed');
+        this.deleting.set(null);
+      }
+    });
   }
 }

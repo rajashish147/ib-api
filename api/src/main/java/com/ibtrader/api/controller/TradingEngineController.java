@@ -2,6 +2,7 @@ package com.ibtrader.api.controller;
 
 import com.ibtrader.application.EngineState;
 import com.ibtrader.application.TradingEngineOrchestrator;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
@@ -12,6 +13,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/v1/engine")
 @RequiredArgsConstructor
+@Tag(name = "Engine", description = "Manually trigger, pause, or resume the trading pipeline")
 public class TradingEngineController {
 
     @Value("${app.ib.accounts.default.paper:DUP854695}")

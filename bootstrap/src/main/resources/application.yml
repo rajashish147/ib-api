@@ -1,11 +1,3 @@
-# ══════════════════════════════════════════════════════════════════════════════
-# IBKR Portfolio Management & Automated Trading Platform
-# Main application configuration
-#
-# ⚠️  IMPORTANT: This file must NEVER contain passwords, API keys, or secrets.
-#     All sensitive values must be provided via environment variables.
-# ══════════════════════════════════════════════════════════════════════════════
-
 spring:
   application:
     name: ib-trader
@@ -13,7 +5,7 @@ spring:
   lifecycle:
     timeout-per-shutdown-phase: 30s
 
-  # ── Database ────────────────────────────────────────────────────────────────
+  # ── Database ──────────────────────────────────────────────────────────────────
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/ibtrader}
     username: ${DB_USERNAME:ibtrader}
@@ -30,15 +22,14 @@ spring:
       leak-detection-threshold: 60000
       auto-commit: false
 
-  # ── JPA / Hibernate ─────────────────────────────────────────────────────────
+  # ── JPA / Hibernate ───────────────────────────────────────────────────────────
   jpa:
     hibernate:
-      ddl-auto: validate            # Flyway owns schema; Hibernate must only validate
-    open-in-view: false             # Prevent DB queries during view rendering
+      ddl-auto: validate
+    open-in-view: false
     show-sql: false
     properties:
       hibernate:
-        # dialect is auto-detected — do NOT set explicitly (HHH90000025 warning)
         format_sql: true
         use_sql_comments: true
         jdbc:
@@ -48,18 +39,19 @@ spring:
         order_updates: true
         connection:
           provider_disables_autocommit: true
-        generate_statistics: false   # set true for query tuning sessions
+        generate_statistics: false
 
-  # ── Flyway ──────────────────────────────────────────────────────────────────
+  # ── Flyway ────────────────────────────────────────────────────────────────────
   flyway:
     enabled: true
     locations: classpath:db/migration
     baseline-on-migrate: false
     validate-on-migrate: true
     out-of-order: false
-    clean-disabled: true            # NEVER allow clean in production
+    clean-disabled: true
     repair: true
-  # ── Jackson ─────────────────────────────────────────────────────────────────
+
+  # ── Jackson ───────────────────────────────────────────────────────────────────
   jackson:
     default-property-inclusion: non_null
     serialization:
@@ -81,37 +73,20 @@ server:
   error:
     include-message: always
     include-binding-errors: always
-    include-stacktrace: never        # Never expose stack traces in production
+    include-stacktrace: never
     include-exception: false
 
-# ── Actuator / Management ─────────────────────────────────────────────────────
+# ── Actuator ──────────────────────────────────────────────────────────────────
 management:
-  server:
-    port: ${MANAGEMENT_PORT:8081}
   endpoints:
     web:
       exposure:
-        include: health, info, prometheus, metrics, env, loggers, flyway
+        include: health, info, metrics, env, loggers, flyway
   endpoint:
     health:
       show-details: always
       show-components: always
       probes:
-        enabled: true
-    prometheus:
-      enabled: true
-  metrics:
-    tags:
-      application: ${spring.application.name}
-      environment: ${APP_ENV:local}
-    distribution:
-      percentiles-histogram:
-        http.server.requests: true
-      percentiles:
-        http.server.requests: 0.5, 0.75, 0.95, 0.99
-  prometheus:
-    metrics:
-      export:
         enabled: true
 
 # ── OpenAPI / Swagger ─────────────────────────────────────────────────────────
@@ -128,11 +103,11 @@ springdoc:
   packages-to-scan: com.ibtrader.api.controller
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Application-specific configuration
+# Application configuration
 # ══════════════════════════════════════════════════════════════════════════════
 app:
 
-  # ── Interactive Brokers Connection ──────────────────────────────────────────
+  # ── Interactive Brokers ───────────────────────────────────────────────────────
   ib:
     accounts:
       default:
@@ -143,52 +118,46 @@ app:
     port: ${IB_PORT:4002}              # 4002 = paper trading gateway; 4001 = live
     client-id: ${IB_CLIENT_ID:1}
     paper-trading: ${IB_PAPER_TRADING:true}
-    account-id: ${IB_ACCOUNT_ID:DUP854695}      # Required: your IB account number
+    account-id: ${IB_ACCOUNT_ID:DUP854695}
     connection:
       reconnect-interval-seconds: 30
       heartbeat-interval-seconds: 60
       max-reconnect-attempts: 20
       connection-timeout-seconds: 15
     orders:
-      use-adaptive-algo: false         # Use IB Adaptive Algo for execution quality
-      tif: DAY                         # Time In Force: DAY, GTC, IOC, GTD
+      use-adaptive-algo: false
+      tif: DAY
 
-  # ── Portfolio ────────────────────────────────────────────────────────────────
+  # ── Portfolio ─────────────────────────────────────────────────────────────────
   portfolio:
-    snapshot-interval-seconds: 5      # How often to capture portfolio snapshots
-    snapshot-retention-days: 90       # How long to keep snapshots in DB
-    staleness-threshold-seconds: 30   # Alert if snapshot older than this
+    snapshot-interval-seconds: 5
+    snapshot-retention-days: 90
+    staleness-threshold-seconds: 30
 
-  # ── Strategy ─────────────────────────────────────────────────────────────────
+  # ── Strategy ──────────────────────────────────────────────────────────────────
   strategy:
-    evaluation-interval-seconds: 30   # Poll frequency for threshold evaluation (each cycle ~15s, so 30s gives breathing room)
+    evaluation-interval-seconds: 30
     default-strategy-name: primary
-    default-mode: FULL_REBALANCE      # FULL_REBALANCE | FIXED_AMOUNT | HYBRID
+    default-mode: FULL_REBALANCE
 
-    # ── Threshold triggers ────────────────────────────────────────────────────
     thresholds:
-      buy-nlv: ${STRATEGY_BUY_NLV:25000.00}   # Buy signal when NLV <= this
-      sell-nlv: ${STRATEGY_SELL_NLV:35000.00}  # Sell signal when NLV >= this
+      buy-nlv: ${STRATEGY_BUY_NLV:25000.00}
+      sell-nlv: ${STRATEGY_SELL_NLV:35000.00}
 
-    # ── Fixed amount per asset (Option B) ─────────────────────────────────────
     fixed-amount-per-asset-usd: ${STRATEGY_FIXED_AMOUNT:1000.00}
 
-    # ── Allocation targets (Option A — Full Rebalance) ─────────────────────────
-    # Must sum to 100%. Weights are percentages.
     allocation-targets:
       SPY: 30.0
       QQQ: 40.0
       VOO: 20.0
       MNQ: 10.0
 
-    # ── Rebalance thresholds ──────────────────────────────────────────────────
     rebalance:
-      drift-threshold-pct: 5.0         # Only rebalance if drift > 5%
-      min-trade-value-usd: 100.00       # Ignore trades below this notional value
-      require-approval: false           # If true, plans must be manually approved
+      drift-threshold-pct: 5.0
+      min-trade-value-usd: 100.00
+      require-approval: false
 
-  # ── Asset Registry ───────────────────────────────────────────────────────────
-  # Assets listed here are auto-registered on startup if not already in DB.
+  # ── Asset Registry ────────────────────────────────────────────────────────────
   assets:
     - symbol: SPY
       exchange: SMART
@@ -211,7 +180,7 @@ app:
       asset-class: FUTURES
       enabled: true
       multiplier: 5
-      local-symbol: ""                # Leave blank; resolved from IB at startup
+      local-symbol: ""
     - symbol: MNQ
       exchange: CME
       currency: USD
@@ -230,45 +199,23 @@ app:
       asset-class: STOCK
       enabled: true
 
-  # ── Risk Management ──────────────────────────────────────────────────────────
-  risk:
-    # Pre-trade checks are always ON; individual limits can be disabled in DB
-    pre-trade-checks-enabled: true
-    circuit-breaker-enabled: true
-
-    limits:
-      max-position-size-pct: 60.0         # No single position > 60% of portfolio
-      max-futures-exposure-pct: 20.0       # Futures exposure < 20% of NLV
-      max-leverage: 2.0                    # Never exceed 2x leverage
-      max-daily-loss-pct: 5.0              # Stop trading if daily loss > 5% of NLV
-      max-drawdown-pct: 15.0               # Stop trading if drawdown > 15% from peak
-      max-concentration-pct: 60.0          # Single asset concentration cap
-      max-sector-concentration-pct: 80.0   # Single sector concentration cap
-      emergency-stop-nlv: 20000.00         # Hard stop if NLV < $20,000
-
-  # ── Market Data ──────────────────────────────────────────────────────────────
+  # ── Market Data ───────────────────────────────────────────────────────────────
   market-data:
-    price-staleness-seconds: 60        # Warn if price older than 60s
-    subscription-delay-ms: 500         # Delay between market data subscriptions (IB rate limit)
-
-  # ── Audit ────────────────────────────────────────────────────────────────────
-  audit:
-    enabled: true
-    retention-days: 365                # Keep audit logs for 1 year
+    price-staleness-seconds: 60
+    subscription-delay-ms: 500
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 logging:
   level:
     root: INFO
     com.ibtrader: DEBUG
-    com.ib.client: WARN               # IB API internal logging (very verbose)
-    org.springframework.statemachine: INFO
+    com.ib.client: WARN
     org.hibernate.SQL: WARN
     org.hibernate.type.descriptor.sql: WARN
     org.flywaydb: INFO
   pattern:
-    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] [%X{correlationId}] %-5level %logger{36} - %msg%n"
-    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] [%X{correlationId}] [%X{accountId}] %-5level %logger{36} - %msg%n"
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
   file:
     name: ${LOG_DIR:logs}/ib-trader.log
   logback:

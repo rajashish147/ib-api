@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -35,6 +36,7 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/v1/assets")
 @RequiredArgsConstructor
+@Tag(name = "Assets", description = "Register and look up tradeable instruments (stocks, ETFs, futures)")
 public class AssetController {
 
     private final AssetRepository assetRepository;

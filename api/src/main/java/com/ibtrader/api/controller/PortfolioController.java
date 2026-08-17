@@ -5,6 +5,7 @@ import com.ibtrader.domain.model.portfolio.PortfolioSnapshot;
 import com.ibtrader.domain.port.inbound.GetPortfolioSummaryUseCase;
 import com.ibtrader.domain.port.inbound.GetSnapshotHistoryUseCase;
 import com.ibtrader.domain.port.inbound.ReconcilePositionsUseCase;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
@@ -20,6 +21,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/v1/portfolio")
 @RequiredArgsConstructor
+@Tag(name = "Portfolio", description = "View portfolio positions, NLV, and snapshot history")
 public class PortfolioController {
 
     @Value("${app.ib.accounts.default.paper:DUP854695}")

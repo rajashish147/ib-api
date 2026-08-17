@@ -4,6 +4,7 @@ import com.ibtrader.api.dto.MarketDataQuoteDto;
 import com.ibtrader.domain.model.asset.Asset;
 import com.ibtrader.domain.port.outbound.AssetRepository;
 import com.ibtrader.domain.port.outbound.MarketDataCache;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -32,6 +33,7 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/v1/market-data")
 @RequiredArgsConstructor
+@Tag(name = "Market Data", description = "Live/delayed price quotes from IB TWS")
 public class MarketDataController {
 
     /** Prices older than this are flagged as stale in the response. */
