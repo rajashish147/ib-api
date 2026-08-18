@@ -25,6 +25,12 @@ public interface StrategyApiMapper {
     @Mapping(target = "id", ignore = true)
     @Mapping(target = "versionId", ignore = true)
     @Mapping(target = "state", ignore = true)
+    @Mapping(target = "riskProfile",
+             expression = "java(request.riskProfile() != null ? request.riskProfile() : \"MODERATE\")")
+    @Mapping(target = "priority",
+             expression = "java(request.priority() != null ? request.priority() : 0)")
+    @Mapping(target = "cooldownMinutes",
+             expression = "java(request.cooldownMinutes() != null ? request.cooldownMinutes() : 60)")
     TradingStrategy toDomain(StrategyRequestDto request);
 
     default BasketTarget map(BasketTargetDto dto) {

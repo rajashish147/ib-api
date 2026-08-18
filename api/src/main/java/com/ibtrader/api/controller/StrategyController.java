@@ -83,7 +83,12 @@ public class StrategyController {
             @Valid @RequestBody StrategyRequestDto request) {
 
         TradingStrategy existing = manageStrategyUseCase.getStrategyById(id);
-        TradingStrategy toUpdate = strategyApiMapper.toDomain(request, existing);
+        TradingStrategy fromRequest = strategyApiMapper.toDomain(request);
+        TradingStrategy toUpdate = fromRequest.toBuilder()
+                .id(existing.getId())
+                .versionId(existing.getVersionId())
+                .state(existing.getState())
+                .build();
         TradingStrategy updated = manageStrategyUseCase.updateStrategy(id, toUpdate);
         log.info("Updated strategy: {}", id);
         return ResponseEntity.ok(StrategyResponseDto.from(updated));
