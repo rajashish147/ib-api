@@ -47,8 +47,8 @@ import { PortfolioDto, EngineStatusDto, StrategyDto } from '../../core/models/ap
         <div class="engine-header">
           <div class="section-title">Engine</div>
           @if (engineStatus()) {
-            <span class="status-badge" [class.running]="engineStatus()!.status === 'RUNNING'" [class.paused]="engineStatus()!.status !== 'RUNNING'">
-              <mat-icon class="badge-icon">{{ engineStatus()!.status === 'RUNNING' ? 'play_circle' : 'pause_circle' }}</mat-icon>
+            <span class="status-badge" [class.running]="isRunning()" [class.paused]="!isRunning()">
+              <mat-icon class="badge-icon">{{ isRunning() ? 'play_circle' : 'pause_circle' }}</mat-icon>
               {{ engineStatus()!.status }}
             </span>
           }
@@ -57,10 +57,10 @@ import { PortfolioDto, EngineStatusDto, StrategyDto } from '../../core/models/ap
           <button mat-stroked-button (click)="triggerPipeline()" [disabled]="engineBusy()">
             <mat-icon>bolt</mat-icon> Trigger
           </button>
-          <button mat-stroked-button (click)="pauseEngine()" [disabled]="engineBusy() || engineStatus()?.status !== 'RUNNING'">
+          <button mat-stroked-button (click)="pauseEngine()" [disabled]="engineBusy() || !isRunning()">
             <mat-icon>pause</mat-icon> Pause
           </button>
-          <button mat-stroked-button (click)="resumeEngine()" [disabled]="engineBusy() || engineStatus()?.status === 'RUNNING'">
+          <button mat-stroked-button (click)="resumeEngine()" [disabled]="engineBusy() || isRunning()">
             <mat-icon>play_arrow</mat-icon> Resume
           </button>
         </div>
@@ -172,6 +172,7 @@ export class DashboardComponent implements OnInit {
   readonly loading = signal(true);
   readonly error = signal(false);
   readonly engineBusy = signal(false);
+  readonly isRunning = () => this.engineStatus()?.status?.toUpperCase() === 'RUNNING';
 
   readonly nlv = () => this.formatMoney(this.portfolio()?.netLiquidationValue);
   readonly cash = () => this.formatMoney(this.portfolio()?.totalCashValue);
