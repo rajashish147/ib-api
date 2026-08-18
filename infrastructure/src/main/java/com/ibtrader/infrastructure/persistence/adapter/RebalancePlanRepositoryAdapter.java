@@ -7,6 +7,7 @@ import com.ibtrader.infrastructure.persistence.mapper.RebalancePlanMapper;
 import com.ibtrader.infrastructure.persistence.repository.RebalancePlanJpaRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,6 +20,7 @@ import java.util.stream.Collectors;
  * Adapter implementation for {@link RebalancePlanRepository}.
  */
 @Component
+@Profile("!demo")
 @RequiredArgsConstructor
 @Slf4j
 public class RebalancePlanRepositoryAdapter implements RebalancePlanRepository {

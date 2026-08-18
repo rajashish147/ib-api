@@ -5,12 +5,14 @@ import com.ibtrader.domain.port.outbound.StrategyExecutionHistoryPort;
 import com.ibtrader.infrastructure.persistence.entity.StrategyExecutionHistoryEntity;
 import com.ibtrader.infrastructure.persistence.repository.StrategyExecutionHistoryJpaRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
 import java.util.UUID;
 
 @Repository
+@Profile("!demo")
 @RequiredArgsConstructor
 public class StrategyExecutionHistoryAdapter implements StrategyExecutionHistoryPort {
 

@@ -6,6 +6,7 @@ import com.ibtrader.infrastructure.persistence.entity.IbCommandStatus;
 import com.ibtrader.infrastructure.persistence.repository.IbCommandOutboxJpaRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Profile;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -14,6 +15,7 @@ import java.util.List;
 
 @Slf4j
 @Component
+@Profile("!demo")
 @RequiredArgsConstructor
 public class BrokerConnectionEventListener {
 

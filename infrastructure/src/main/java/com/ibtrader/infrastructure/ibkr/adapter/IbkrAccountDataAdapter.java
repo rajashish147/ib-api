@@ -4,6 +4,7 @@ import com.ibtrader.domain.port.outbound.AccountDataPort;
 import com.ibtrader.infrastructure.broker.ibkr.IbConnectionManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 /**
@@ -11,6 +12,7 @@ import org.springframework.stereotype.Service;
  * live {@link IbConnectionManager} which owns the IB TWS / Gateway connection.
  */
 @Service
+@Profile("!demo")
 @RequiredArgsConstructor
 @Slf4j
 public class IbkrAccountDataAdapter implements AccountDataPort {

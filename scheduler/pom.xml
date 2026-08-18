@@ -22,11 +22,6 @@
             <artifactId>application</artifactId>
             <version>${project.version}</version>
         </dependency>
-        <dependency>
-            <groupId>com.ibtrader</groupId>
-            <artifactId>strategy-engine</artifactId>
-            <version>${project.version}</version>
-        </dependency>
 
         <!-- spring-context, spring-beans: used directly (used-but-undeclared via starters) -->
         <dependency>

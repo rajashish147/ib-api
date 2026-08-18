@@ -1,20 +1,22 @@
 package com.ibtrader.config;
 
+import com.ibtrader.application.engine.SimpleDecisionEngine;
+import com.ibtrader.application.engine.SimpleOrderPlanningEngine;
+import com.ibtrader.application.engine.SimplePortfolioAnalysisEngine;
+import com.ibtrader.application.engine.SimpleRiskValidationEngine;
+import com.ibtrader.application.engine.SimpleRuleEvaluationEngine;
 import com.ibtrader.domain.engine.DefaultVariableRegistry;
 import com.ibtrader.domain.engine.VariableRegistry;
 import com.ibtrader.domain.port.inbound.DecisionEnginePort;
 import com.ibtrader.domain.port.inbound.OrderPlanningPort;
 import com.ibtrader.domain.port.inbound.PortfolioAnalysisPort;
+import com.ibtrader.domain.port.inbound.RiskValidationPort;
 import com.ibtrader.domain.port.inbound.RuleEvaluationPort;
 import com.ibtrader.domain.port.inbound.provider.DecisionProvider;
 import com.ibtrader.domain.port.inbound.provider.DecisionProviderRegistry;
 import com.ibtrader.domain.port.outbound.AssetRepository;
 import com.ibtrader.domain.port.outbound.ExecutionPolicyRepository;
 import com.ibtrader.domain.port.outbound.MarketDataCache;
-import com.ibtrader.strategy.engine.DecisionEngine;
-import com.ibtrader.strategy.engine.OrderPlanningEngine;
-import com.ibtrader.strategy.engine.PortfolioAnalysisEngine;
-import com.ibtrader.strategy.engine.RuleEvaluationEngine;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -41,17 +43,22 @@ public class DomainConfig {
     @Bean
     public PortfolioAnalysisPort portfolioAnalysisEngine(
             AssetRepository assetRepository, MarketDataCache marketDataCache) {
-        return new PortfolioAnalysisEngine(assetRepository, marketDataCache);
+        return new SimplePortfolioAnalysisEngine();
     }
 
     @Bean
-    public RuleEvaluationPort ruleEvaluationEngine(VariableRegistry variableRegistry) {
-        return new RuleEvaluationEngine(variableRegistry);
+    public RuleEvaluationPort ruleEvaluationEngine() {
+        return new SimpleRuleEvaluationEngine();
     }
 
     @Bean
     public DecisionEnginePort decisionEngine() {
-        return new DecisionEngine();
+        return new SimpleDecisionEngine();
+    }
+
+    @Bean
+    public RiskValidationPort riskValidationEngine() {
+        return new SimpleRiskValidationEngine();
     }
 
     @Bean
@@ -59,13 +66,11 @@ public class DomainConfig {
             MarketDataCache marketDataCache,
             AssetRepository assetRepository,
             ExecutionPolicyRepository executionPolicyRepository) {
-        return new OrderPlanningEngine(marketDataCache, assetRepository, executionPolicyRepository);
+        return new SimpleOrderPlanningEngine();
     }
 
     /**
-     * Collects all DecisionProvider @Component beans (PriceThresholdDecisionProvider,
-     * RuleProvider, MachineLearningDecisionProvider, PortfolioGoalDecisionProvider,
-     * TechnicalIndicatorDecisionProvider) into a single registry.
+     * Collects all DecisionProvider @Component beans into a single registry.
      * Spring automatically injects all beans implementing DecisionProvider as the List parameter.
      */
     @Bean

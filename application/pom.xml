@@ -17,16 +17,6 @@
             <artifactId>domain</artifactId>
             <version>${project.version}</version>
         </dependency>
-        <dependency>
-            <groupId>com.ibtrader</groupId>
-            <artifactId>strategy-engine</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>com.ibtrader</groupId>
-            <artifactId>risk</artifactId>
-            <version>${project.version}</version>
-        </dependency>
 
         <!-- spring-context, spring-tx, slf4j-api: used directly (used-but-undeclared via starters) -->
         <dependency>
